@@ -1,3 +1,9 @@
+"use client"
+
+import { useEffect, useState } from "react"
+
+import { useRouter } from "next/navigation"
+
 import {
   Table,
   TableBody,
@@ -7,75 +13,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  AdminDataError,
+  getAdminJson,
+  logsSchema,
+  toAuditLogs,
+  type AuditLog,
+} from "@/lib/admin-client"
 
-type AuditLog = {
-  timestamp: string
-  actor: string
-  action: string
-  resource: string
-  details: string
+function formatTimestamp(timestamp: string) {
+  return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp))
 }
 
-const auditLogs = [
-  {
-    timestamp: "07 Nov 2026, 10:42 AM",
-    actor: "Admin",
-    action: "Assigned evaluator",
-    resource: "Submission HM-K8Q2P",
-    details: "Judge Ananya assigned",
-  },
-  {
-    timestamp: "07 Nov 2026, 10:29 AM",
-    actor: "Admin",
-    action: "Updated challenge brief",
-    resource: "Challenge",
-    details: "Published version 1.3",
-  },
-  {
-    timestamp: "07 Nov 2026, 10:05 AM",
-    actor: "Admin",
-    action: "Published announcement",
-    resource: "Event updates",
-    details: "Registration reminder",
-  },
-  {
-    timestamp: "07 Nov 2026, 09:54 AM",
-    actor: "Aarav Sen",
-    action: "Submitted registration",
-    resource: "Binary Beacons",
-    details: "Adamas University",
-  },
-  {
-    timestamp: "07 Nov 2026, 09:32 AM",
-    actor: "Admin",
-    action: "Updated event controls",
-    resource: "Registrations",
-    details: "Enabled registrations",
-  },
-  {
-    timestamp: "07 Nov 2026, 09:18 AM",
-    actor: "Judge Rohan",
-    action: "Submitted evaluation",
-    resource: "Submission HM-M4X7D",
-    details: "Round 1 scores recorded",
-  },
-  {
-    timestamp: "07 Nov 2026, 09:04 AM",
-    actor: "Admin",
-    action: "Recalculated scores",
-    resource: "Leaderboard",
-    details: "Results remain private",
-  },
-  {
-    timestamp: "07 Nov 2026, 08:47 AM",
-    actor: "Admin",
-    action: "Updated submission status",
-    resource: "Submission HM-T9V3L",
-    details: "Marked as evaluated",
-  },
-] satisfies readonly AuditLog[]
-
 export default function LogsPage() {
+  const router = useRouter()
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getAdminJson("/api/admin/logs", logsSchema, controller.signal)
+      .then((response) => {
+        setLoadError("")
+        setAuditLogs(toAuditLogs(response))
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof AdminDataError && error.status === 401) {
+          router.replace("/login")
+          return
+        }
+        setLoadError("Audit logs could not be loaded.")
+      })
+    return () => controller.abort()
+  }, [router])
+
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <div>
@@ -89,6 +61,7 @@ export default function LogsPage() {
         <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
+            {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
             <p className="text-sm tracking-tighter text-muted-foreground">
               {auditLogs.length} recorded events
             </p>
@@ -108,18 +81,21 @@ export default function LogsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {auditLogs.map((log) => (
-                <TableRow
-                  key={`${log.timestamp}-${log.action}`}
-                  className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100" : undefined}
-                >
-                  <TableCell>{log.timestamp}</TableCell>
+              {auditLogs.length ? auditLogs.map((log) => (
+                <TableRow key={`${log.timestamp}-${log.action}`}>
+                  <TableCell>{formatTimestamp(log.timestamp)}</TableCell>
                   <TableCell className="font-medium">{log.actor}</TableCell>
                   <TableCell>{log.action}</TableCell>
                   <TableCell>{log.resource}</TableCell>
                   <TableCell>{log.details}</TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    {loadError || "Loading activity..."}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

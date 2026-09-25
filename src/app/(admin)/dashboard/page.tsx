@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 import { ArrowUpRight } from "lucide-react"
 
 import { Grid } from "@/components/charts/grid"
@@ -17,6 +19,14 @@ import { Pie, PieChart } from "recharts"
 
 import { RichButton } from "@/components/rich-button"
 import {
+  AdminDataError,
+  getAdminJson,
+  overviewSchema,
+  registrationCategories,
+  toOverview,
+  type RegistrationCategory,
+} from "@/lib/admin-client"
+import {
   Table,
   TableBody,
   TableCaption,
@@ -27,51 +37,6 @@ import {
 } from "@/components/ui/table"
 
 import { MetricsCard } from "../components/ui/metricscard"
-
-const registrationSeries = [
-  { date: "2026-11-01", registrations: 24 },
-  { date: "2026-11-02", registrations: 31 },
-  { date: "2026-11-03", registrations: 45 },
-  { date: "2026-11-04", registrations: 38 },
-  { date: "2026-11-05", registrations: 52 },
-  { date: "2026-11-06", registrations: 61 },
-  { date: "2026-11-07", registrations: 73 },
-] as const
-
-const metrics = {
-  name: "Admin",
-  registrations: 324,
-  monetaryAmount: 32400,
-  submissions: 86,
-  totalUsers: 512,
-} as const
-
-const registrationSplit = [
-  {
-    group: "ACM Students from Adamas",
-    label: "Adamas ACM",
-    registrations: 102,
-    fill: "var(--color-adamas-acm)",
-  },
-  {
-    group: "Adamas University Only No ACM",
-    label: "Adamas only",
-    registrations: 86,
-    fill: "var(--color-adamas-no-acm)",
-  },
-  {
-    group: "Outer College No ACM",
-    label: "Outer college",
-    registrations: 74,
-    fill: "var(--color-outer-no-acm)",
-  },
-  {
-    group: "Outer College + ACM Chapter Member",
-    label: "Outer + ACM",
-    registrations: 62,
-    fill: "var(--color-outer-acm)",
-  },
-] as const
 
 const registrationSplitConfig = {
   registrations: { label: "Registrations" },
@@ -93,41 +58,71 @@ const registrationSplitConfig = {
   },
 } satisfies ChartConfig
 
-const recentRegistrations = [
-  { teamName: "Binary Beacons", leader: "Aarav Sen", email: "aarav.sen@example.com", phone: "+91 98310 42165", college: "Adamas University", members: 4, acm: "Yes" },
-  { teamName: "Stack Sprinters", leader: "Ishita Roy", email: "ishita.roy@example.com", phone: "+91 98745 10326", college: "Jadavpur University", members: 3, acm: "No" },
-  { teamName: "Pixel Pioneers", leader: "Rohan Das", email: "rohan.das@example.com", phone: "+91 90071 62548", college: "Adamas University", members: 2, acm: "Yes" },
-  { teamName: "Logic Loom", leader: "Sneha Paul", email: "sneha.paul@example.com", phone: "+91 89102 30714", college: "Heritage Institute of Technology", members: 4, acm: "No" },
-  { teamName: "Code Catalysts", leader: "Arjun Ghosh", email: "arjun.ghosh@example.com", phone: "+91 98367 49021", college: "Adamas University", members: 3, acm: "Yes" },
-  { teamName: "Null Pointers", leader: "Mira Dutta", email: "mira.dutta@example.com", phone: "+91 99031 86425", college: "Techno India University", members: 2, acm: "No" },
-  { teamName: "Byte Brigade", leader: "Kabir Shah", email: "kabir.shah@example.com", phone: "+91 97480 51362", college: "Adamas University", members: 4, acm: "Yes" },
-  { teamName: "Runtime Rebels", leader: "Nandini Bose", email: "nandini.bose@example.com", phone: "+91 90731 48269", college: "Narula Institute of Technology", members: 3, acm: "No" },
-  { teamName: "Circuit Crew", leader: "Dev Mallick", email: "dev.mallick@example.com", phone: "+91 98312 67504", college: "Adamas University", members: 2, acm: "Yes" },
-  { teamName: "Kernel Knights", leader: "Tanya Mitra", email: "tanya.mitra@example.com", phone: "+91 89614 23058", college: "University of Calcutta", members: 4, acm: "No" },
-] as const
-
-const recentLogs = [
-  { time: "Nov 7, 2026 · 10:42 AM", actor: "Aarav Sen", action: "Submitted registration", target: "Binary Beacons", details: "Adamas University" },
-  { time: "Nov 7, 2026 · 10:36 AM", actor: "Ishita Roy", action: "Submitted registration", target: "Stack Sprinters", details: "Jadavpur University" },
-  { time: "Nov 7, 2026 · 10:29 AM", actor: "Admin", action: "Updated challenge brief", target: "Challenge", details: "Version 1.3" },
-  { time: "Nov 7, 2026 · 10:17 AM", actor: "Rohan Das", action: "Submitted registration", target: "Pixel Pioneers", details: "Adamas University" },
-  { time: "Nov 7, 2026 · 10:05 AM", actor: "Admin", action: "Published announcement", target: "Event updates", details: "Registration reminder" },
-  { time: "Nov 7, 2026 · 9:54 AM", actor: "Sneha Paul", action: "Submitted registration", target: "Logic Loom", details: "Heritage Institute" },
-  { time: "Nov 7, 2026 · 9:41 AM", actor: "Arjun Ghosh", action: "Submitted registration", target: "Code Catalysts", details: "Adamas University" },
-  { time: "Nov 7, 2026 · 9:32 AM", actor: "Admin", action: "Updated event controls", target: "Registration", details: "Enabled" },
-  { time: "Nov 7, 2026 · 9:18 AM", actor: "Mira Dutta", action: "Submitted registration", target: "Null Pointers", details: "Techno India University" },
-  { time: "Nov 7, 2026 · 9:04 AM", actor: "Admin", action: "Updated leaderboard", target: "Leaderboard", details: "Recalculated scores" },
-] as const
+const registrationSplitPresentation = {
+  "Adamas ACM": {
+    group: "ACM Students from Adamas",
+    label: "Adamas ACM",
+    fill: "var(--color-adamas-acm)",
+  },
+  "Adamas only": {
+    group: "Adamas University Only No ACM",
+    label: "Adamas only",
+    fill: "var(--color-adamas-no-acm)",
+  },
+  "Outer college": {
+    group: "Outer College No ACM",
+    label: "Outer college",
+    fill: "var(--color-outer-no-acm)",
+  },
+  "Outer + ACM": {
+    group: "Outer College + ACM Chapter Member",
+    label: "Outer + ACM",
+    fill: "var(--color-outer-acm)",
+  },
+} satisfies Record<RegistrationCategory, { group: string; label: string; fill: string }>
 
 export default function DashboardPage() {
+  const router = useRouter()
+  const [data, setData] = useState<ReturnType<typeof toOverview> | null>(null)
+  const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getAdminJson("/api/admin/overview", overviewSchema, controller.signal)
+      .then((response) => {
+        setLoadError("")
+        setData(toOverview(response))
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof AdminDataError && error.status === 401) {
+          router.replace("/login")
+          return
+        }
+        setData(null)
+        setLoadError("Dashboard data could not be loaded.")
+      })
+    return () => controller.abort()
+  }, [router])
+
+  const registrationSeries = data?.registrationSeries ?? []
+  const registrationSplit = registrationCategories.map((category) => ({
+    ...registrationSplitPresentation[category],
+    registrations: data?.registrationSplit.find((item) => item.category === category)?.registrations ?? 0,
+  }))
+  const recentRegistrations = data?.recentRegistrations ?? []
+  const recentLogs = data?.recentLogs ?? []
+  const metrics = data?.metrics
+
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-2 rounded-2xl p-2 font-pixel-square leading-tighter ">
       <h1 className="text-2xl font-semibold tracking-tight">
-        Welcome Back {metrics.name}!
+        Welcome Back {data?.viewerName ?? "..."}!
       </h1>
       <p className="text-sm tracking-tighter text-muted-foreground">
         Here is a summary of your dashboard, while you were away!
       </p>
+      {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricsCard
@@ -135,7 +130,7 @@ export default function DashboardPage() {
           description="The total number of registrations"
         >
           <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics.registrations.toLocaleString()}
+            {metrics ? metrics.registrations.toLocaleString() : "—"}
           </p>
         </MetricsCard>
         <MetricsCard
@@ -143,17 +138,17 @@ export default function DashboardPage() {
           description="The total monetary amount of submissions"
         >
           <p className="font-mono text-4xl font-semibold tracking-tight">
-            ₹{metrics.monetaryAmount.toLocaleString()}
+            {metrics ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(metrics.monetaryAmountMinor / 100) : "—"}
           </p>
         </MetricsCard>
         <MetricsCard title="Submissions" description="The total number of submissions">
           <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics.submissions.toLocaleString()}
+            {metrics ? metrics.submissions.toLocaleString() : "—"}
           </p>
         </MetricsCard>
         <MetricsCard title="Total Users" description="The total number of users">
           <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics.totalUsers.toLocaleString()}
+            {metrics ? metrics.totalUsers.toLocaleString() : "—"}
           </p>
         </MetricsCard>
       </div>
@@ -261,8 +256,8 @@ export default function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentRegistrations.map((registration) => (
-                <TableRow key={registration.email}>
+              {recentRegistrations.length ? recentRegistrations.map((registration) => (
+                <TableRow key={registration.registrationId}>
                   <TableCell className="font-medium">{registration.teamName}</TableCell>
                   <TableCell>{registration.leader}</TableCell>
                   <TableCell>{registration.email}</TableCell>
@@ -279,7 +274,13 @@ export default function DashboardPage() {
                     </RichButton>
                   </TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    {loadError || (data ? "No registrations yet." : "Loading registrations...")}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
@@ -318,18 +319,24 @@ export default function DashboardPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentLogs.map((log) => (
+              {recentLogs.length ? recentLogs.map((log) => (
                 <TableRow
-                  key={`${log.time}-${log.action}`}
+                  key={`${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}-${log.action}`}
                   className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100" : undefined}
                 >
-                  <TableCell>{log.time}</TableCell>
+                  <TableCell>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}</TableCell>
                   <TableCell className="font-medium">{log.actor}</TableCell>
                   <TableCell>{log.action}</TableCell>
-                  <TableCell>{log.target}</TableCell>
+                  <TableCell>{log.resource}</TableCell>
                   <TableCell>{log.details}</TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    {loadError || (data ? "No activity recorded yet." : "Loading activity...")}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

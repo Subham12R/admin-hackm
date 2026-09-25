@@ -1,8 +1,9 @@
 "use client"
 
-import { type ReactNode, useEffect, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 
 import { format } from "date-fns"
+import { useRouter } from "next/navigation"
 import { CalendarIcon } from "lucide-react"
 
 import { Area, AreaChart } from "@/components/charts/area-chart"
@@ -10,6 +11,15 @@ import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
 import { RichButton } from "@/components/rich-button"
+import {
+  AdminDataError,
+  getAdminJson,
+  registrationCategories,
+  registrationsPageSchema,
+  toRegistrationsPage,
+  type Registration,
+  type RegistrationCategory,
+} from "@/lib/admin-client"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import {
@@ -38,29 +48,6 @@ import {
 
 const PAGE_SIZE = 10
 
-const categories = [
-  "Adamas ACM",
-  "Adamas only",
-  "Outer college",
-  "Outer + ACM",
-] as const
-
-type RegistrationCategory = (typeof categories)[number]
-type PaymentStatus = "Success" | "Failed" | "Pending"
-
-type Registration = {
-  registeredAt: string
-  teamName: string
-  leader: string
-  email: string
-  phone: string
-  college: string
-  members: number
-  acm: "Yes" | "No"
-  acmMembers?: number
-  category: RegistrationCategory
-  paymentStatus: PaymentStatus
-}
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat("en-IN", { dateStyle: "medium" }).format(
@@ -128,7 +115,8 @@ const registrationColumns: readonly RegistrationColumn[] = [
 ]
 
 export default function RegistrationsPage() {
-  const [registrations, setRegistrations] = useState<Registration[]>([])
+  const router = useRouter()
+  const [data, setData] = useState<ReturnType<typeof toRegistrationsPage> | null>(null)
   const [loadError, setLoadError] = useState("")
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
@@ -138,76 +126,37 @@ export default function RegistrationsPage() {
   )
 
   useEffect(() => {
-    fetch("/api/admin/registrations")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("registrations unavailable")
-        return response.json()
+    const controller = new AbortController()
+    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
+    if (date) params.set("date", format(date, "yyyy-MM-dd"))
+    if (category !== "all") params.set("category", category)
+
+    getAdminJson(
+      `/api/admin/registrations?${params}`,
+      registrationsPageSchema,
+      controller.signal
+    )
+      .then((response) => {
+        setLoadError("")
+        setData(toRegistrationsPage(response))
       })
-      .then((data) => {
-        setRegistrations(data.registrations.map((row: {
-          registered_at: string
-          team_name: string
-          leader: string
-          email: string
-          phone: string
-          college: string
-          members: number
-          acm: "Yes" | "No"
-          acm_members: number
-          category: RegistrationCategory
-          status: string
-        }) => ({
-          registeredAt: row.registered_at,
-          teamName: row.team_name,
-          leader: row.leader,
-          email: row.email,
-          phone: row.phone,
-          college: row.college,
-          members: row.members,
-          acm: row.acm,
-          acmMembers: row.acm_members,
-          category: row.category,
-          paymentStatus: row.status === "PAID" ? "Success" : row.status === "CANCELLED" ? "Failed" : "Pending",
-        })))
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof AdminDataError && error.status === 401) {
+          router.replace("/login")
+          return
+        }
+        setData(null)
+        setLoadError("Registrations could not be loaded.")
       })
-      .catch(() => setLoadError("Registrations could not be loaded."))
-  }, [])
 
-  const filteredRegistrations = useMemo(
-    () =>
-      registrations.filter(
-        (registration) =>
-          (!date || registration.registeredAt === format(date, "yyyy-MM-dd")) &&
-          (category === "all" || registration.category === category)
-      ),
-    [category, date, registrations]
-  )
-  const chartData = useMemo(() => {
-    const countsByDate = new Map<string, { date: string; adamas: number; other: number }>()
+    return () => controller.abort()
+  }, [category, date, page, router])
 
-    for (const registration of filteredRegistrations) {
-      const point = countsByDate.get(registration.registeredAt) ?? {
-        date: registration.registeredAt,
-        adamas: 0,
-        other: 0,
-      }
-
-      if (registration.college === "Adamas University") {
-        point.adamas += 1
-      } else {
-        point.other += 1
-      }
-
-      countsByDate.set(registration.registeredAt, point)
-    }
-
-    return [...countsByDate.values()].sort((a, b) => a.date.localeCompare(b.date))
-  }, [filteredRegistrations])
-  const pageCount = Math.max(1, Math.ceil(filteredRegistrations.length / PAGE_SIZE))
-  const visibleRegistrations = filteredRegistrations.slice(
-    (page - 1) * PAGE_SIZE,
-    page * PAGE_SIZE
-  )
+  const registrations = data?.registrations ?? []
+  const chartData = data?.dailyCounts ?? []
+  const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
+  const visibleRegistrations = registrations
   const hasFilters = Boolean(date) || category !== "all"
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
@@ -298,7 +247,7 @@ export default function RegistrationsPage() {
               <h2 className="text-lg font-semibold tracking-tight">All registrations</h2>
               {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
-                {filteredRegistrations.length} matching registration{filteredRegistrations.length === 1 ? "" : "s"}
+                {data?.total ?? 0} matching registration{data?.total === 1 ? "" : "s"}
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2">
@@ -344,7 +293,7 @@ export default function RegistrationsPage() {
                   className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   <option value="all">All categories</option>
-                  {categories.map((option) => (
+                  {registrationCategories.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
@@ -419,9 +368,17 @@ export default function RegistrationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleRegistrations.length ? (
+              {data === null && !loadError ? (
+                Array.from({ length: 3 }, (_, index) => (
+                  <TableRow key={index} aria-hidden="true">
+                    <TableCell colSpan={visibleColumns.length}>
+                      <div className="h-5 w-full animate-pulse rounded bg-zinc-100" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : visibleRegistrations.length ? (
                 visibleRegistrations.map((registration) => (
-                  <TableRow key={registration.email}>
+                  <TableRow key={registration.registrationId}>
                     {visibleColumns.map((column) => (
                       <TableCell key={column.key} className={column.className}>
                         {column.render(registration)}
@@ -435,7 +392,7 @@ export default function RegistrationsPage() {
                     colSpan={visibleColumns.length}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    No registrations match these filters.
+                    {loadError || "No registrations match these filters."}
                   </TableCell>
                 </TableRow>
               )}
@@ -444,7 +401,7 @@ export default function RegistrationsPage() {
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4">
             <p className="text-sm tracking-tighter text-muted-foreground">
-              Showing {visibleRegistrations.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, filteredRegistrations.length)} of {filteredRegistrations.length}
+              Showing {visibleRegistrations.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, data?.total ?? 0)} of {data?.total ?? 0}
             </p>
             <nav aria-label="Registration table pagination" className="flex items-center gap-2">
               <RichButton

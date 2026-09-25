@@ -1,8 +1,17 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+
+import { useRouter } from "next/navigation"
 
 import { RichButton } from "@/components/rich-button"
+import {
+  AdminDataError,
+  evaluationsSchema,
+  getAdminJson,
+  toEvaluations,
+  type Evaluation,
+} from "@/lib/admin-client"
 import {
   Table,
   TableBody,
@@ -21,16 +30,6 @@ const metrics = [
   { key: "completeness", label: "Completeness" },
 ] as const
 
-type Metric = (typeof metrics)[number]["key"]
-
-type Evaluation = {
-  teamId: string
-  round: string
-  scores: Record<Metric, number>
-  evaluatedAt: string
-  evaluatedBy: string
-}
-
 const sortOptions = [
   { value: "newest", label: "Newest evaluation" },
   { value: "oldest", label: "Oldest evaluation" },
@@ -40,47 +39,6 @@ const sortOptions = [
 ] as const
 
 type SortOption = (typeof sortOptions)[number]["value"]
-
-const rounds = ["Round 1", "Round 2"] as const
-const evaluators = ["Judge Ananya", "Judge Rohan"] as const
-
-const evaluations = [
-  {
-    teamId: "HM-K8Q2P",
-    round: "Round 1",
-    scores: { innovation: 9, technical: 8, problemSolving: 9, uiUx: 8, completeness: 8 },
-    evaluatedAt: "2026-11-07T15:42:00+05:30",
-    evaluatedBy: "Judge Ananya",
-  },
-  {
-    teamId: "HM-M4X7D",
-    round: "Round 1",
-    scores: { innovation: 8, technical: 9, problemSolving: 8, uiUx: 7, completeness: 9 },
-    evaluatedAt: "2026-11-07T16:18:00+05:30",
-    evaluatedBy: "Judge Rohan",
-  },
-  {
-    teamId: "HM-T9V3L",
-    round: "Round 1",
-    scores: { innovation: 7, technical: 8, problemSolving: 8, uiUx: 9, completeness: 7 },
-    evaluatedAt: "2026-11-07T16:31:00+05:30",
-    evaluatedBy: "Judge Ananya",
-  },
-  {
-    teamId: "HM-C6N1R",
-    round: "Round 2",
-    scores: { innovation: 9, technical: 8, problemSolving: 9, uiUx: 9, completeness: 8 },
-    evaluatedAt: "2026-11-08T10:12:00+05:30",
-    evaluatedBy: "Judge Rohan",
-  },
-  {
-    teamId: "HM-B2F5W",
-    round: "Round 2",
-    scores: { innovation: 8, technical: 7, problemSolving: 8, uiUx: 8, completeness: 8 },
-    evaluatedAt: "2026-11-08T10:48:00+05:30",
-    evaluatedBy: "Judge Ananya",
-  },
-] satisfies readonly Evaluation[]
 
 function totalScore(evaluation: Evaluation) {
   return metrics.reduce((total, metric) => total + evaluation.scores[metric.key], 0)
@@ -94,10 +52,34 @@ function formatEvaluationTime(timestamp: string) {
 }
 
 export default function EvaluationsPage() {
+  const router = useRouter()
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([])
+  const [loadError, setLoadError] = useState("")
   const [teamIdQuery, setTeamIdQuery] = useState("")
-  const [round, setRound] = useState<(typeof rounds)[number] | "all">("all")
-  const [evaluator, setEvaluator] = useState<(typeof evaluators)[number] | "all">("all")
+  const [round, setRound] = useState("all")
+  const [evaluator, setEvaluator] = useState("all")
   const [sort, setSort] = useState<SortOption>("newest")
+
+  useEffect(() => {
+    const controller = new AbortController()
+    getAdminJson("/api/admin/evaluations", evaluationsSchema, controller.signal)
+      .then((response) => {
+        setLoadError("")
+        setEvaluations(toEvaluations(response))
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof AdminDataError && error.status === 401) {
+          router.replace("/login")
+          return
+        }
+        setLoadError("Evaluations could not be loaded.")
+      })
+    return () => controller.abort()
+  }, [router])
+
+  const rounds = useMemo(() => [...new Set(evaluations.map((item) => item.round))], [evaluations])
+  const evaluators = useMemo(() => [...new Set(evaluations.map((item) => item.evaluatedBy))], [evaluations])
 
   const filteredEvaluations = useMemo(
     () =>
@@ -107,7 +89,7 @@ export default function EvaluationsPage() {
           (round === "all" || evaluation.round === round) &&
           (evaluator === "all" || evaluation.evaluatedBy === evaluator)
       ),
-    [evaluator, round, teamIdQuery]
+    [evaluations, evaluator, round, teamIdQuery]
   )
   const sortedEvaluations = useMemo(() => {
     return [...filteredEvaluations].sort((a, b) => {
@@ -141,6 +123,7 @@ export default function EvaluationsPage() {
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Evaluation score sheet</h2>
+              {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
                 {filteredEvaluations.length} evaluation{filteredEvaluations.length === 1 ? "" : "s"}
               </p>
@@ -159,7 +142,7 @@ export default function EvaluationsPage() {
                 Round
                 <select
                   value={round}
-                  onChange={(event) => setRound(event.target.value as typeof round)}
+                  onChange={(event) => setRound(event.target.value)}
                   className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   <option value="all">All rounds</option>
@@ -170,7 +153,7 @@ export default function EvaluationsPage() {
                 Evaluator
                 <select
                   value={evaluator}
-                  onChange={(event) => setEvaluator(event.target.value as typeof evaluator)}
+                  onChange={(event) => setEvaluator(event.target.value)}
                   className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 >
                   <option value="all">All evaluators</option>
@@ -242,7 +225,7 @@ export default function EvaluationsPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={metrics.length + 5} className="h-24 text-center text-muted-foreground">
-                    No evaluations match these filters.
+                    {loadError || "No evaluations match these filters."}
                   </TableCell>
                 </TableRow>
               )}

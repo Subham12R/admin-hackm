@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { ExternalLink } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { RichButton } from "@/components/rich-button"
 import {
@@ -23,94 +24,82 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import {
+  AdminDataError,
+  assignmentSchema,
+  evaluatorsSchema,
+  getAdminJson,
+  submissionsSchema,
+  toSubmissions,
+  type Evaluator,
+  type Submission,
+} from "@/lib/admin-client"
 
-type SubmissionStatus = "Draft" | "Submitted" | "Evaluated"
-
-type Submission = {
-  teamId: string
-  teamName: string
-  projectName: string
-  links: readonly { label: string; href: string }[]
-  startTime: string
-  endTime: string
-  status: SubmissionStatus
-}
-
-const submissions = [
-  {
-    teamId: "HM-2026-001",
-    teamName: "Binary Beacons",
-    projectName: "Campus Compass",
-    links: [
-      { label: "GitHub", href: "https://github.com/hackmatrix/binary-beacons" },
-      { label: "Demo", href: "https://binary-beacons.example.com" },
-      { label: "Video", href: "https://youtube.com/watch?v=binary-beacons" },
-    ],
-    startTime: "07 Nov 2026, 09:00 AM",
-    endTime: "07 Nov 2026, 03:42 PM",
-    status: "Evaluated",
-  },
-  {
-    teamId: "HM-2026-002",
-    teamName: "Stack Sprinters",
-    projectName: "Civic Connect",
-    links: [
-      { label: "GitHub", href: "https://github.com/hackmatrix/stack-sprinters" },
-      { label: "Demo", href: "https://stack-sprinters.example.com" },
-    ],
-    startTime: "07 Nov 2026, 09:05 AM",
-    endTime: "07 Nov 2026, 04:18 PM",
-    status: "Submitted",
-  },
-  {
-    teamId: "HM-2026-003",
-    teamName: "Pixel Pioneers",
-    projectName: "Care Queue",
-    links: [
-      { label: "GitHub", href: "https://github.com/hackmatrix/pixel-pioneers" },
-      { label: "Demo", href: "https://pixel-pioneers.example.com" },
-      { label: "Video", href: "https://youtube.com/watch?v=pixel-pioneers" },
-    ],
-    startTime: "07 Nov 2026, 09:12 AM",
-    endTime: "07 Nov 2026, 02:56 PM",
-    status: "Evaluated",
-  },
-  {
-    teamId: "HM-2026-004",
-    teamName: "Logic Loom",
-    projectName: "Study Circle",
-    links: [{ label: "GitHub", href: "https://github.com/hackmatrix/logic-loom" }],
-    startTime: "07 Nov 2026, 09:20 AM",
-    endTime: "—",
-    status: "Draft",
-  },
-  {
-    teamId: "HM-2026-005",
-    teamName: "Code Catalysts",
-    projectName: "Food Flow",
-    links: [
-      { label: "GitHub", href: "https://github.com/hackmatrix/code-catalysts" },
-      { label: "Demo", href: "https://code-catalysts.example.com" },
-    ],
-    startTime: "07 Nov 2026, 09:25 AM",
-    endTime: "07 Nov 2026, 04:05 PM",
-    status: "Submitted",
-  },
-] satisfies readonly Submission[]
-
-const statusClassName: Record<SubmissionStatus, string> = {
+const statusClassName: Record<Submission["status"], string> = {
   Draft: "bg-zinc-100 text-zinc-700",
   Submitted: "bg-amber-50 text-amber-700",
   Evaluated: "bg-emerald-50 text-emerald-700",
 }
 
-const evaluators = ["Judge Ananya", "Judge Rohan", "Judge Meera"] as const
+function formatDateTime(value: string | null) {
+  return value
+    ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+    : "—"
+}
 
 export default function SubmissionsPage() {
-  const [assigneeByTeamId, setAssigneeByTeamId] = useState<Record<string, string>>({})
+  const router = useRouter()
+  const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [evaluators, setEvaluators] = useState<Evaluator[]>([])
+  const [loadError, setLoadError] = useState("")
+  const [assignError, setAssignError] = useState("")
+  const [assigningTeamId, setAssigningTeamId] = useState<string | null>(null)
 
-  function assignEvaluator(teamId: string, evaluator: string) {
-    setAssigneeByTeamId((current) => ({ ...current, [teamId]: evaluator }))
+  useEffect(() => {
+    const controller = new AbortController()
+    Promise.all([
+      getAdminJson("/api/admin/submissions", submissionsSchema, controller.signal),
+      getAdminJson("/api/admin/evaluators", evaluatorsSchema, controller.signal),
+    ])
+      .then(([submissionResponse, evaluatorResponse]) => {
+        setLoadError("")
+        setSubmissions(toSubmissions(submissionResponse))
+        setEvaluators(evaluatorResponse.evaluators)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return
+        if (error instanceof AdminDataError && error.status === 401) {
+          router.replace("/login")
+          return
+        }
+        setLoadError("Submissions could not be loaded.")
+      })
+    return () => controller.abort()
+  }, [router])
+
+  async function assignEvaluator(submission: Submission, evaluator: Evaluator) {
+    setAssigningTeamId(submission.teamId)
+    setAssignError("")
+    try {
+      const response = await fetch(`/api/admin/submissions/${submission.registrationId}/assign`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ assignee_email: evaluator.email }),
+      })
+      if (response.status === 401) {
+        router.replace("/login")
+        return
+      }
+      if (!response.ok) throw new Error("assignment unavailable")
+      const { assigned_to } = assignmentSchema.parse(await response.json())
+      setSubmissions((current) => current.map((item) =>
+        item.teamId === submission.teamId ? { ...item, assignedTo: assigned_to } : item
+      ))
+    } catch {
+      setAssignError("Evaluator assignment could not be saved.")
+    } finally {
+      setAssigningTeamId(null)
+    }
   }
 
   return (
@@ -126,6 +115,7 @@ export default function SubmissionsPage() {
         <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold tracking-tight">Project submissions</h2>
+            {loadError || assignError ? <p role="alert" className="text-sm text-red-600">{loadError || assignError}</p> : null}
             <p className="text-sm tracking-tighter text-muted-foreground">
               {submissions.length} submission{submissions.length === 1 ? "" : "s"}
             </p>
@@ -147,7 +137,7 @@ export default function SubmissionsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {submissions.map((submission) => (
+              {submissions.length ? submissions.map((submission) => (
                 <TableRow key={submission.teamId}>
                   <TableCell>{submission.teamName}</TableCell>
                   <TableCell>{submission.projectName}</TableCell>
@@ -167,12 +157,10 @@ export default function SubmissionsPage() {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell>{submission.startTime}</TableCell>
-                  <TableCell>{submission.endTime}</TableCell>
+                  <TableCell>{formatDateTime(submission.startTime)}</TableCell>
+                  <TableCell>{formatDateTime(submission.endTime)}</TableCell>
                   <TableCell>
-                    <span
-                      className={`rounded-md px-2 py-1 text-xs tracking-tighter ${statusClassName[submission.status]}`}
-                    >
+                    <span className={`rounded-md px-2 py-1 text-xs tracking-tighter ${statusClassName[submission.status]}`}>
                       {submission.status}
                     </span>
                   </TableCell>
@@ -184,36 +172,40 @@ export default function SubmissionsPage() {
                             type="button"
                             color="zinc"
                             size="sm"
+                            disabled={!submission.canAssign || assigningTeamId === submission.teamId}
                             className="font-pixel-square tracking-tighter"
                           >
-                            {assigneeByTeamId[submission.teamId] ?? "Assign"}
+                            {submission.assignedTo?.display_name ?? "Assign"}
                           </RichButton>
                         }
                       />
-                      <DropdownMenuContent
-                        align="end"
-                        className="w-48 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl"
-                      >
+                      <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl">
                         <DropdownMenuGroup>
                           <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
                             Assign evaluator
                           </DropdownMenuLabel>
                           <DropdownMenuSeparator />
-                          {evaluators.map((evaluator) => (
+                          {evaluators.length ? evaluators.map((evaluator) => (
                             <DropdownMenuItem
-                              key={evaluator}
-                              onClick={() => assignEvaluator(submission.teamId, evaluator)}
+                              key={evaluator.email}
+                              onClick={() => void assignEvaluator(submission, evaluator)}
                               className="font-pixel-square normal-case tracking-tighter"
                             >
-                              {evaluator}
+                              {evaluator.display_name}
                             </DropdownMenuItem>
-                          ))}
+                          )) : <DropdownMenuItem disabled>No evaluators available</DropdownMenuItem>}
                         </DropdownMenuGroup>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                    {loadError || "Loading submissions..."}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

@@ -19,13 +19,13 @@ export default async function AdminDashboardLayout({
   return (
     <SidebarProvider className="min-h-svh bg-background font-pixel-square rounded-xl ">
       <AdminSidebar />
-      <SidebarInset className="rounded-xl">
+      <SidebarInset className="min-w-0 rounded-xl">
         <header className="flex h-14 shrink-0 items-center gap-2  px-4 font-pixel-square ">
           <SidebarTrigger className="rounded-md hover:bg-zinc-100" />
 
           <span className="text-sm font-medium font-pixel-square">HackMatrix Admin</span>
         </header>
-        <div className="flex flex-1 flex-col gap-2 p-4 md:p-6 font-pixel-square rounded-2xl">
+        <div className="min-w-0 flex flex-1 flex-col gap-2 p-4 md:p-6 font-pixel-square rounded-2xl">
           {children}
         </div>
       </SidebarInset>

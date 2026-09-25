@@ -42,7 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import FallbackAvatar from "./fallback-avatar"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 type NavigationGroup = {
   label: string
@@ -89,9 +89,25 @@ const navigation: NavigationGroup[] = [
   },
 ]
 
-export function AdminSidebar({ user }: { user: { name: string; email: string } }) {
+export function AdminSidebar() {
   const pathname = usePathname() ?? ""
   const [open, setOpen] = useState(false)
+  const [user, setUser] = useState({ name: "", email: "" })
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then(async (response) => {
+        if (response.status === 401) {
+          window.location.assign("/login")
+          return null
+        }
+        return response.ok ? response.json() : null
+      })
+      .then((data) => {
+        if (!data?.user) return
+        setUser({ name: data.user.display_name, email: data.user.email })
+      })
+  }, [])
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" })
@@ -152,8 +168,8 @@ export function AdminSidebar({ user }: { user: { name: string; email: string } }
                 size="lg"
                 className="rounded-lg bg-sidebar px-2 py-1 data-popup-open:bg-sidebar-accent hover:bg-sidebar-accent cursor-pointer"
               >
-                <FallbackAvatar name={user.name} className="border" size={24} animated />
-                <span className="min-w-0 truncate font-pixel-square text-md capitalize tracking-tighter">{user.name}</span>
+                {user.name ? <FallbackAvatar name={user.name} className="border" size={24} animated /> : <span className="size-6 animate-pulse rounded-full bg-zinc-200" />}
+                <span className="min-w-0 truncate font-pixel-square text-md capitalize tracking-tighter">{user.name || <span className="inline-block h-4 w-24 animate-pulse rounded bg-zinc-200" />}</span>
                 <ChevronDown
                   className={`ml-auto size-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
                 />

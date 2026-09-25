@@ -14,18 +14,11 @@ export default async function AdminDashboardLayout({
   children: ReactNode
 }) {
   const access = (await cookies()).get("hackmatrix_admin_access")?.value
-  const backend = process.env.BACKEND_URL
-  if (!access || !backend) redirect("/login")
-  const me = await fetch(`${backend}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${access}` },
-    cache: "no-store",
-  })
-  if (!me.ok) redirect("/login")
-  const profile = await me.json()
+  if (!access) redirect("/login")
 
   return (
     <SidebarProvider className="min-h-svh bg-background font-pixel-square rounded-xl ">
-      <AdminSidebar user={{ name: profile.user.display_name, email: profile.user.email }} />
+      <AdminSidebar />
       <SidebarInset className="rounded-xl">
         <header className="flex h-14 shrink-0 items-center gap-2  px-4 font-pixel-square ">
           <SidebarTrigger className="rounded-md hover:bg-zinc-100" />

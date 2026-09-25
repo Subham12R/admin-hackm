@@ -33,12 +33,26 @@ export default function Auth09() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email, password }),
     })
-    setPending(false)
     if (!response.ok) {
+      setPending(false)
       setError("Invalid email or password.")
       return
     }
     router.push("/dashboard")
+  }
+
+  if (pending && !error) {
+    return (
+      <div className="min-h-dvh animate-pulse bg-zinc-50 p-6" aria-busy="true" aria-label="Opening dashboard">
+        <div className="h-8 w-48 rounded-md bg-zinc-200" />
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          <div className="h-28 rounded-xl bg-zinc-200" />
+          <div className="h-28 rounded-xl bg-zinc-200" />
+          <div className="h-28 rounded-xl bg-zinc-200" />
+        </div>
+        <div className="mt-4 h-72 rounded-xl bg-zinc-200" />
+      </div>
+    )
   }
 
   return (

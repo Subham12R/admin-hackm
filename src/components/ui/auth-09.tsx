@@ -28,17 +28,23 @@ export default function Auth09() {
     event.preventDefault()
     setPending(true)
     setError("")
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    })
-    if (!response.ok) {
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null)
+        setPending(false)
+        setError(typeof data?.error === "string" ? data.error : "Invalid email or password.")
+        return
+      }
+      router.push("/dashboard")
+    } catch {
       setPending(false)
-      setError("Invalid email or password.")
-      return
+      setError("The admin service could not be reached. Try again.")
     }
-    router.push("/dashboard")
   }
 
   if (pending && !error) {

@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowUpRight } from "lucide-react"
 
 import { Grid } from "@/components/charts/grid"
@@ -19,13 +20,14 @@ import { Pie, PieChart } from "recharts"
 
 import { RichButton } from "@/components/rich-button"
 import {
-  AdminDataError,
-  getAdminJson,
+  adminQuery,
   overviewSchema,
   registrationCategories,
   toOverview,
   type RegistrationCategory,
 } from "@/lib/admin-client"
+import { Notice } from "@/components/admin/kit"
+import { can, keys, useMe } from "@/lib/queries"
 import {
   Table,
   TableBody,
@@ -83,27 +85,23 @@ const registrationSplitPresentation = {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [data, setData] = useState<ReturnType<typeof toOverview> | null>(null)
-  const [loadError, setLoadError] = useState("")
+  const me = useMe()
+  const roles = me.data?.user.roles
+  const staff = can.read(roles ?? [])
+  const overview = useQuery({
+    queryKey: keys.overview,
+    queryFn: adminQuery("/api/admin/overview", overviewSchema),
+    select: toOverview,
+    enabled: staff,
+    refetchInterval: 60_000,
+  })
+  const data = overview.data ?? null
+  const loadError = overview.isError ? "Dashboard data could not be loaded." : ""
 
   useEffect(() => {
-    const controller = new AbortController()
-    getAdminJson("/api/admin/overview", overviewSchema, controller.signal)
-      .then((response) => {
-        setLoadError("")
-        setData(toOverview(response))
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        if (error instanceof AdminDataError && error.status === 401) {
-          router.replace("/login")
-          return
-        }
-        setData(null)
-        setLoadError("Dashboard data could not be loaded.")
-      })
-    return () => controller.abort()
-  }, [router])
+    // Judges have no access to identity-bearing dashboards; send them to their queue.
+    if (roles && !staff && can.judge(roles)) router.replace("/dashboard/judging")
+  }, [staff, roles, router])
 
   const registrationSeries = data?.registrationSeries ?? []
   const registrationSplit = registrationCategories.map((category) => ({
@@ -123,11 +121,17 @@ export default function DashboardPage() {
         Here is a summary of your dashboard, while you were away!
       </p>
       {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
+      {metrics && metrics.paymentsNeedingReview > 0 ? (
+        <Notice tone="amber">
+          {metrics.paymentsNeedingReview} captured payment{metrics.paymentsNeedingReview === 1 ? "" : "s"} need review (late, duplicate, or mismatched).{" "}
+          <Link href="/dashboard/payments" className="underline">Open payments</Link>
+        </Notice>
+      ) : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricsCard
           title="Registrations"
-          description="The total number of registrations"
+          description={metrics ? `${metrics.paidTeams.toLocaleString()} paid, the rest awaiting payment` : "Active registrations"}
         >
           <p className="font-mono text-4xl font-semibold tracking-tight">
             {metrics ? metrics.registrations.toLocaleString() : "—"}
@@ -135,13 +139,13 @@ export default function DashboardPage() {
         </MetricsCard>
         <MetricsCard
           title="Monetary Amount"
-          description="The total monetary amount of submissions"
+          description="Captured payments, net of refunds"
         >
           <p className="font-mono text-4xl font-semibold tracking-tight">
             {metrics ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(metrics.monetaryAmountMinor / 100) : "—"}
           </p>
         </MetricsCard>
-        <MetricsCard title="Submissions" description="The total number of submissions">
+        <MetricsCard title="Submissions" description="Final project submissions">
           <p className="font-mono text-4xl font-semibold tracking-tight">
             {metrics ? metrics.submissions.toLocaleString() : "—"}
           </p>
@@ -157,7 +161,7 @@ export default function DashboardPage() {
         <div className="col-span-3">
         <MetricsCard
           title="Registration Analytics"
-          description="New registrations over the last seven days"
+          description="Registrations per day (IST)"
 
         >
           <figure className="h-72 w-full p-3 text-left">
@@ -183,7 +187,9 @@ export default function DashboardPage() {
               />
             </LineChart>
             <figcaption className="sr-only">
-              Daily registrations from November 1 through November 7, 2026.
+              {registrationSeries.length
+                ? `Daily registrations from ${registrationSeries[0].date} to ${registrationSeries[registrationSeries.length - 1].date}.`
+                : "No registrations yet."}
             </figcaption>
           </figure>
         </MetricsCard>
@@ -321,7 +327,7 @@ export default function DashboardPage() {
             <TableBody>
               {recentLogs.length ? recentLogs.map((log) => (
                 <TableRow
-                  key={`${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}-${log.action}`}
+                  key={log.id ?? `${log.timestamp}-${log.action}-${log.resource}`}
                   className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100" : undefined}
                 >
                   <TableCell>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}</TableCell>

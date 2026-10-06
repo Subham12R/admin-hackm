@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { ApiError } from "@/lib/api"
+
 export const registrationCategories = [
   "Adamas ACM",
   "Adamas only",
@@ -27,7 +29,11 @@ const registrationRowSchema = z.object({
   category: categorySchema,
   registration_status: z.string(),
   payment_status: z.string(),
+  payment_needs_review: z.boolean().default(false),
+  adjustment_status: z.string().default("NONE"),
+  acm_pending: z.number().int().nonnegative().default(0),
   amount_minor: z.number().int().nonnegative(),
+  refunded_amount_minor: z.number().int().nonnegative().default(0),
 })
 const dailyCountSchema = z.object({
   date: z.string(),
@@ -39,6 +45,7 @@ const evaluatorSchema = z.object({
   display_name: z.string(),
 })
 const logSchema = z.object({
+  id: z.string().optional(),
   timestamp: z.string(),
   actor: z.string(),
   action: z.string(),
@@ -50,9 +57,11 @@ export const overviewSchema = z.object({
   viewer_name: z.string(),
   metrics: z.object({
     registrations: z.number().int().nonnegative(),
-    monetary_amount_minor: z.number().int().nonnegative(),
+    paid_teams: z.number().int().nonnegative().default(0),
+    monetary_amount_minor: z.number().int(),
     submissions: z.number().int().nonnegative(),
     total_users: z.number().int().nonnegative(),
+    payments_needing_review: z.number().int().nonnegative().default(0),
   }),
   registration_series: z.array(
     z.object({ date: z.string(), registrations: z.number().int().nonnegative() })
@@ -85,6 +94,8 @@ export const teamsPageSchema = z.object({
       college: z.string(),
       members: z.array(
         z.object({
+          id: z.string(),
+          acm_review_status: z.string(),
           name: z.string(),
           email: z.string(),
           phone: z.string(),
@@ -99,6 +110,7 @@ export const teamsPageSchema = z.object({
       acm_members: z.number().int().nonnegative(),
       category: categorySchema,
       status: z.string(),
+      adjustment: z.object({ status: z.string(), amount_minor: z.number().int() }),
       review: reviewSchema,
     })
   ),
@@ -108,41 +120,53 @@ export const teamsPageSchema = z.object({
   daily_counts: z.array(dailyCountSchema),
 })
 
+const judgeSlotSchema = evaluatorSchema.extend({
+  assignment_id: z.string(),
+  scorecard_status: z.string(),
+})
+
 export const submissionsSchema = z.object({
   submissions: z.array(
     z.object({
       team_id: z.string(),
       registration_id: z.string(),
       team_name: z.string(),
+      anonymous_code: z.string().nullable(),
       project_name: z.string(),
+      description: z.string(),
       links: z.array(z.object({ label: z.string(), href: z.string() })),
       start_time: z.string(),
+      updated_at: z.string().nullable(),
       end_time: z.string().nullable(),
       status: z.enum(["Draft", "Submitted", "Evaluated"]),
+      submission_status: z.string(),
+      evaluations: z.number().int().nonnegative(),
       assigned_to: evaluatorSchema.nullable(),
+      judges: z.array(judgeSlotSchema),
       can_assign: z.boolean(),
     })
   ),
+  round: z.object({ id: z.string(), name: z.string(), status: z.string() }).nullable(),
 })
 
-export const evaluatorsSchema = z.object({ evaluators: z.array(evaluatorSchema) })
-
-export const assignmentSchema = z.object({ assigned_to: evaluatorSchema })
+export const evaluatorsSchema = z.object({
+  evaluators: z.array(evaluatorSchema.extend({ assignments: z.number().int().default(0) })),
+})
 
 export const evaluationsSchema = z.object({
   evaluations: z.array(
     z.object({
+      scorecard_id: z.string(),
       team_id: z.string(),
+      team_name: z.string(),
       registration_id: z.string(),
       round: z.string(),
-      scores: z.object({
-        innovation: z.number().int(),
-        technical: z.number().int(),
-        problem_solving: z.number().int(),
-        ui_ux: z.number().int(),
-        completeness: z.number().int(),
-      }),
-      evaluated_at: z.string(),
+      round_id: z.string(),
+      scores: z.record(z.string(), z.number()),
+      criteria: z.array(z.object({ key: z.string(), label: z.string(), max_score: z.number() })),
+      total: z.number(),
+      comments: z.string(),
+      evaluated_at: z.string().nullable(),
       evaluated_by: z.string(),
     })
   ),
@@ -150,11 +174,9 @@ export const evaluationsSchema = z.object({
 
 export const logsSchema = z.object({ logs: z.array(logSchema) })
 
-export const reviewResponseSchema = z.object({ review: reviewSchema })
-
-export class AdminDataError extends Error {
-  constructor(readonly status: number) {
-    super("admin-data-unavailable")
+export class AdminDataError extends ApiError {
+  constructor(status: number) {
+    super(status, "admin-data-unavailable")
   }
 }
 
@@ -189,19 +211,27 @@ export type Registration = {
   members: number
   acm: "Yes" | "No"
   acmMembers: number
+  acmPending: number
   category: RegistrationCategory
+  registrationStatus: string
   paymentStatus: "Success" | "Pending" | "Failed"
+  paymentNeedsReview: boolean
+  adjustmentStatus: string
   amountMinor: number
+  refundedAmountMinor: number
 }
 
-export type Team = Omit<Registration, "members" | "paymentStatus" | "amountMinor"> & {
+export type Team = Omit<Registration, "members" | "paymentStatus" | "amountMinor" | "registrationStatus" | "paymentNeedsReview" | "adjustmentStatus" | "acmPending" | "refundedAmountMinor"> & {
   teamId: string
+  status: string
   members: TeamMember[]
   memberCount: number
+  adjustment: { status: string; amountMinor: number }
   review: TeamReview
 }
 
 export type TeamMember = {
+  id: string
   name: string
   email: string
   phone: string
@@ -209,6 +239,7 @@ export type TeamMember = {
   role: string
   acm: "Yes" | "No"
   acmId: string | null
+  acmReviewStatus: string
 }
 
 export type TeamReview = {
@@ -217,35 +248,44 @@ export type TeamReview = {
   reviewedBy: string | null
 }
 
+export type JudgeSlot = Evaluator & { assignmentId: string; scorecardStatus: string }
+
 export type Submission = {
   teamId: string
   registrationId: string
   teamName: string
+  anonymousCode: string | null
   projectName: string
+  description: string
   links: { label: string; href: string }[]
   startTime: string
+  updatedAt: string | null
   endTime: string | null
   status: "Draft" | "Submitted" | "Evaluated"
+  submissionStatus: string
+  evaluations: number
   assignedTo: Evaluator | null
+  judges: JudgeSlot[]
   canAssign: boolean
 }
 
 export type Evaluation = {
+  scorecardId: string
   teamId: string
+  teamName: string
   registrationId: string
   round: string
-  scores: {
-    innovation: number
-    technical: number
-    problemSolving: number
-    uiUx: number
-    completeness: number
-  }
-  evaluatedAt: string
+  roundId: string
+  scores: Record<string, number>
+  criteria: { key: string; label: string; maxScore: number }[]
+  total: number
+  comments: string
+  evaluatedAt: string | null
   evaluatedBy: string
 }
 
 export type AuditLog = {
+  id?: string
   timestamp: string
   actor: string
   action: string
@@ -257,9 +297,11 @@ export type Overview = {
   viewerName: string
   metrics: {
     registrations: number
+    paidTeams: number
     monetaryAmountMinor: number
     submissions: number
     totalUsers: number
+    paymentsNeedingReview: number
   }
   registrationSeries: { date: string; registrations: number }[]
   registrationSplit: { category: RegistrationCategory; registrations: number }[]
@@ -272,9 +314,11 @@ export function toOverview(data: z.infer<typeof overviewSchema>): Overview {
     viewerName: data.viewer_name,
     metrics: {
       registrations: data.metrics.registrations,
+      paidTeams: data.metrics.paid_teams,
       monetaryAmountMinor: data.metrics.monetary_amount_minor,
       submissions: data.metrics.submissions,
       totalUsers: data.metrics.total_users,
+      paymentsNeedingReview: data.metrics.payments_needing_review,
     },
     registrationSeries: data.registration_series,
     registrationSplit: data.registration_split,
@@ -295,7 +339,7 @@ export function toRegistrationsPage(data: z.infer<typeof registrationsPageSchema
 
 export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
   return {
-    teams: data.items.map((team) => ({
+    teams: data.items.map((team): Team => ({
       registrationId: team.registration_id,
       teamId: team.team_id,
       registeredAt: team.registered_at,
@@ -304,7 +348,9 @@ export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
       email: team.email,
       phone: team.phone,
       college: team.college,
+      status: team.status,
       members: team.members.map((member) => ({
+        id: member.id,
         name: member.name,
         email: member.email,
         phone: member.phone,
@@ -312,11 +358,13 @@ export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
         role: member.role,
         acm: member.acm,
         acmId: member.acm_id,
+        acmReviewStatus: member.acm_review_status,
       })),
       memberCount: team.member_count,
       acm: team.acm,
       acmMembers: team.acm_members,
       category: team.category,
+      adjustment: { status: team.adjustment.status, amountMinor: team.adjustment.amount_minor },
       review: toReview(team.review),
     })),
     total: data.total,
@@ -331,28 +379,39 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
     teamId: submission.team_id,
     registrationId: submission.registration_id,
     teamName: submission.team_name,
+    anonymousCode: submission.anonymous_code,
     projectName: submission.project_name,
+    description: submission.description,
     links: submission.links,
     startTime: submission.start_time,
+    updatedAt: submission.updated_at,
     endTime: submission.end_time,
     status: submission.status,
+    submissionStatus: submission.submission_status,
+    evaluations: submission.evaluations,
     assignedTo: submission.assigned_to,
+    judges: submission.judges.map((judge) => ({
+      email: judge.email,
+      display_name: judge.display_name,
+      assignmentId: judge.assignment_id,
+      scorecardStatus: judge.scorecard_status,
+    })),
     canAssign: submission.can_assign,
   }))
 }
 
 export function toEvaluations(data: z.infer<typeof evaluationsSchema>): Evaluation[] {
   return data.evaluations.map((evaluation) => ({
+    scorecardId: evaluation.scorecard_id,
     teamId: evaluation.team_id,
+    teamName: evaluation.team_name,
     registrationId: evaluation.registration_id,
     round: evaluation.round,
-    scores: {
-      innovation: evaluation.scores.innovation,
-      technical: evaluation.scores.technical,
-      problemSolving: evaluation.scores.problem_solving,
-      uiUx: evaluation.scores.ui_ux,
-      completeness: evaluation.scores.completeness,
-    },
+    roundId: evaluation.round_id,
+    scores: evaluation.scores,
+    criteria: evaluation.criteria.map((criterion) => ({ key: criterion.key, label: criterion.label, maxScore: criterion.max_score })),
+    total: evaluation.total,
+    comments: evaluation.comments,
     evaluatedAt: evaluation.evaluated_at,
     evaluatedBy: evaluation.evaluated_by,
   }))
@@ -382,14 +441,20 @@ function toRegistration(row: RegistrationRow): Registration {
     members: row.members,
     acm: row.acm,
     acmMembers: row.acm_members,
+    acmPending: row.acm_pending,
     category: row.category,
+    registrationStatus: row.registration_status,
     paymentStatus: paymentStatus(row.payment_status),
+    paymentNeedsReview: row.payment_needs_review,
+    adjustmentStatus: row.adjustment_status,
     amountMinor: row.amount_minor,
+    refundedAmountMinor: row.refunded_amount_minor,
   }
 }
 
 function toAuditLog(log: z.infer<typeof logSchema>): AuditLog {
   return {
+    id: log.id,
     timestamp: log.timestamp,
     actor: log.actor,
     action: log.action,
@@ -400,6 +465,11 @@ function toAuditLog(log: z.infer<typeof logSchema>): AuditLog {
 
 function paymentStatus(status: string): Registration["paymentStatus"] {
   if (status === "CAPTURED") return "Success"
-  if (status === "FAILED") return "Failed"
+  if (status === "FAILED" || status === "CANCELLED") return "Failed"
   return "Pending"
+}
+
+/** Fetch + validate through the same-origin BFF; used as a TanStack Query function. */
+export function adminQuery<T>(url: string, schema: z.ZodType<T>) {
+  return ({ signal }: { signal: AbortSignal }) => getAdminJson(url, schema, signal)
 }

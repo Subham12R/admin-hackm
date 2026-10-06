@@ -1,9 +1,9 @@
 "use client"
 
-import { Fragment, type ReactNode, useEffect, useState } from "react"
+import { Fragment, type ReactNode, useState } from "react"
 
 import { format } from "date-fns"
-import { useRouter } from "next/navigation"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { CalendarIcon, EllipsisVertical } from "lucide-react"
 
 import { BarChart } from "@/components/charts/bar-chart"
@@ -12,13 +12,14 @@ import { BarXAxis } from "@/components/charts/bar-x-axis"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
+import { Badge, StatusBadge } from "@/components/admin/kit"
+import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
+import { errorMessage, rupees } from "@/lib/api"
+import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
 import {
-  AdminDataError,
-  getAdminJson,
+  adminQuery,
   registrationCategories,
-  reviewResponseSchema,
   teamsPageSchema,
-  toReview,
   toTeamsPage,
   type RegistrationCategory,
   type Team as Registration,
@@ -103,11 +104,10 @@ const registrationColumns: readonly RegistrationColumn[] = [
 ]
 
 export default function TeamsPage() {
-  const router = useRouter()
-  const [data, setData] = useState<ReturnType<typeof toTeamsPage> | null>(null)
-  const [loadError, setLoadError] = useState("")
+  const me = useMe()
+  const canReview = can.review(me.data?.user.roles ?? [])
   const [reviewError, setReviewError] = useState("")
-  const [savingReviewId, setSavingReviewId] = useState<string | null>(null)
+  const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [page, setPage] = useState(1)
@@ -118,29 +118,22 @@ export default function TeamsPage() {
       .map((column) => column.key)
   )
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
-    if (date) params.set("date", format(date, "yyyy-MM-dd"))
-    if (category !== "all") params.set("category", category)
-
-    getAdminJson(`/api/admin/teams?${params}`, teamsPageSchema, controller.signal)
-      .then((response) => {
-        setLoadError("")
-        setData(toTeamsPage(response))
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        if (error instanceof AdminDataError && error.status === 401) {
-          router.replace("/login")
-          return
-        }
-        setData(null)
-        setLoadError("Teams could not be loaded.")
-      })
-
-    return () => controller.abort()
-  }, [category, date, page, router])
+  const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
+  if (date) params.set("date", format(date, "yyyy-MM-dd"))
+  if (category !== "all") params.set("category", category)
+  const query = useQuery({
+    queryKey: keys.teams(params.toString()),
+    queryFn: adminQuery(`/api/admin/teams?${params}`, teamsPageSchema),
+    select: toTeamsPage,
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+  })
+  const data = query.data ?? null
+  const loadError = query.isError ? "Teams could not be loaded." : ""
+  const review = useAdminMutation<{ registrationId: string; status: string }>(
+    ({ registrationId, status }) => ({ path: `/api/admin/teams/${registrationId}/review`, body: { status } }),
+    REGISTRATION_AREAS
+  )
 
   const registrations = data?.teams ?? []
   const chartData = (data?.dailyCounts ?? []).map((point) => ({
@@ -174,31 +167,12 @@ export default function TeamsPage() {
     })
   }
 
-  async function reviewTeam(registrationId: string, status: "VERIFIED" | "DECLINED") {
-    setSavingReviewId(registrationId)
+  async function reviewTeam(registrationId: string, status: "PENDING" | "VERIFIED" | "DECLINED") {
     setReviewError("")
     try {
-      const response = await fetch(`/api/admin/teams/${registrationId}/review`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status }),
-      })
-      if (response.status === 401) {
-        router.replace("/login")
-        return
-      }
-      if (!response.ok) throw new Error("team review unavailable")
-      const { review } = reviewResponseSchema.parse(await response.json())
-      setData((current) => current && {
-        ...current,
-        teams: current.teams.map((team) =>
-          team.registrationId === registrationId ? { ...team, review: toReview(review) } : team
-        ),
-      })
-    } catch {
-      setReviewError("Team review could not be saved.")
-    } finally {
-      setSavingReviewId(null)
+      await review.mutateAsync({ registrationId, status })
+    } catch (error) {
+      setReviewError(errorMessage(error, "Team review could not be saved."))
     }
   }
 
@@ -428,23 +402,34 @@ export default function TeamsPage() {
                                   <p className="text-sm tracking-tighter text-muted-foreground">
                                     {registration.teamName} · {registration.memberCount} participants
                                   </p>
+                                  <p className="mt-1 flex flex-wrap gap-1">
+                                    <StatusBadge status={registration.status} />
+                                    {registration.adjustment.status === "REQUIRED" ? <Badge tone="amber">owes {rupees(registration.adjustment.amountMinor)}</Badge> : null}
+                                    {registration.review.reviewedBy ? <Badge>reviewed by {registration.review.reviewedBy}</Badge> : null}
+                                  </p>
                                 </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenRegistration(registration.registrationId)}
+                                  className="text-sm underline underline-offset-2"
+                                >
+                                  Payments &amp; ACM review
+                                </button>
                                 <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                                   Details review
                                   <select
                                     aria-label={`Details review for ${registration.teamName}`}
                                     value={registration.review.status}
-                                    disabled={savingReviewId === registration.registrationId}
+                                    disabled={!canReview || (review.isPending && review.variables?.registrationId === registration.registrationId)}
                                     onChange={(event) => {
-                                      const status = event.target.value
-                                      if (status !== "PENDING") void reviewTeam(
+                                      void reviewTeam(
                                         registration.registrationId,
-                                        status as "VERIFIED" | "DECLINED"
+                                        event.target.value as "PENDING" | "VERIFIED" | "DECLINED"
                                       )
                                     }}
                                     className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                                   >
-                                    <option value="PENDING" disabled>Pending review</option>
+                                    <option value="PENDING">Pending review</option>
                                     <option value="VERIFIED">Verified</option>
                                     <option value="DECLINED">Declined</option>
                                   </select>
@@ -460,11 +445,12 @@ export default function TeamsPage() {
                                     <TableHead className="h-10 normal-case tracking-tighter">College</TableHead>
                                     <TableHead className="h-10 normal-case tracking-tighter">ACM</TableHead>
                                     <TableHead className="h-10 normal-case tracking-tighter">ACM ID</TableHead>
+                                    <TableHead className="h-10 normal-case tracking-tighter">ACM check</TableHead>
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                   {teamMembers.map((member) => (
-                                    <TableRow key={member.email}>
+                                    <TableRow key={member.id}>
                                       <TableCell className="font-medium">{member.name}</TableCell>
                                       <TableCell>{member.role === "leader" ? "Team leader" : "Member"}</TableCell>
                                       <TableCell>{member.email}</TableCell>
@@ -472,6 +458,7 @@ export default function TeamsPage() {
                                       <TableCell>{member.college}</TableCell>
                                       <TableCell>{member.acm}</TableCell>
                                       <TableCell>{member.acmId ?? "—"}</TableCell>
+                                      <TableCell>{member.acm === "Yes" ? <StatusBadge status={member.acmReviewStatus} /> : "—"}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -528,6 +515,7 @@ export default function TeamsPage() {
           </div>
         </div>
       </section>
+      <RegistrationDrawer registrationId={openRegistration} onClose={() => setOpenRegistration(null)} />
     </div>
   )
 }

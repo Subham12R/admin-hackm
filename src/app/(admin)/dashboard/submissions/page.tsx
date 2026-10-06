@@ -1,215 +1,152 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Fragment, useState } from "react"
 
+import { useQuery } from "@tanstack/react-query"
 import { ExternalLink } from "lucide-react"
-import { useRouter } from "next/navigation"
 
-import { RichButton } from "@/components/rich-button"
-import {
-  DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  AdminDataError,
-  assignmentSchema,
-  evaluatorsSchema,
-  getAdminJson,
-  submissionsSchema,
-  toSubmissions,
-  type Evaluator,
-  type Submission,
-} from "@/lib/admin-client"
+import { Badge, Button, ConfirmButton, Notice, PageHeader, Panel, Select, StatusBadge } from "@/components/admin/kit"
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { adminQuery, evaluatorsSchema, submissionsSchema, toSubmissions, type Submission } from "@/lib/admin-client"
+import { dateTime, errorMessage } from "@/lib/api"
+import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
 
-const statusClassName: Record<Submission["status"], string> = {
-  Draft: "bg-zinc-100 text-zinc-700",
-  Submitted: "bg-amber-50 text-amber-700",
-  Evaluated: "bg-emerald-50 text-emerald-700",
-}
-
-function formatDateTime(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
-    : "—"
-}
+const statusTone = { Draft: "zinc", Submitted: "amber", Evaluated: "green" } as const
 
 export default function SubmissionsPage() {
-  const router = useRouter()
-  const [submissions, setSubmissions] = useState<Submission[]>([])
-  const [evaluators, setEvaluators] = useState<Evaluator[]>([])
-  const [loadError, setLoadError] = useState("")
-  const [assignError, setAssignError] = useState("")
-  const [assigningTeamId, setAssigningTeamId] = useState<string | null>(null)
+  const me = useMe()
+  const roles = me.data?.user.roles ?? []
+  const canAssign = can.assign(roles)
+  const submissions = useQuery({
+    queryKey: keys.submissions,
+    queryFn: adminQuery("/api/admin/submissions", submissionsSchema),
+    refetchInterval: 30_000,
+  })
+  // Only assigners may list judges; asking otherwise is a 403 that used to break this page.
+  const evaluators = useQuery({
+    queryKey: keys.evaluators,
+    queryFn: adminQuery("/api/admin/evaluators", evaluatorsSchema),
+    enabled: canAssign,
+  })
+  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const [filter, setFilter] = useState<"all" | Submission["status"]>("all")
+  const assign = useAdminMutation<{ registrationId: string; email: string }>(
+    ({ registrationId, email }) => ({ path: `/api/admin/submissions/${registrationId}/assign`, body: { assignee_email: email } }),
+    [["submissions"], ["evaluators"], ["board"]]
+  )
+  const reopen = useAdminMutation<string>((registrationId) => ({ path: `/api/admin/submissions/${registrationId}/reopen` }), [["submissions"]])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    Promise.all([
-      getAdminJson("/api/admin/submissions", submissionsSchema, controller.signal),
-      getAdminJson("/api/admin/evaluators", evaluatorsSchema, controller.signal),
-    ])
-      .then(([submissionResponse, evaluatorResponse]) => {
-        setLoadError("")
-        setSubmissions(toSubmissions(submissionResponse))
-        setEvaluators(evaluatorResponse.evaluators)
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        if (error instanceof AdminDataError && error.status === 401) {
-          router.replace("/login")
-          return
-        }
-        setLoadError("Submissions could not be loaded.")
-      })
-    return () => controller.abort()
-  }, [router])
+  const rows = submissions.data ? toSubmissions(submissions.data) : []
+  const visible = filter === "all" ? rows : rows.filter((row) => row.status === filter)
+  const round = submissions.data?.round
 
-  async function assignEvaluator(submission: Submission, evaluator: Evaluator) {
-    setAssigningTeamId(submission.teamId)
-    setAssignError("")
-    try {
-      const response = await fetch(`/api/admin/submissions/${submission.registrationId}/assign`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ assignee_email: evaluator.email }),
-      })
-      if (response.status === 401) {
-        router.replace("/login")
-        return
-      }
-      if (!response.ok) throw new Error("assignment unavailable")
-      const { assigned_to } = assignmentSchema.parse(await response.json())
-      setSubmissions((current) => current.map((item) =>
-        item.teamId === submission.teamId ? { ...item, assignedTo: assigned_to } : item
-      ))
-    } catch {
-      setAssignError("Evaluator assignment could not be saved.")
-    } finally {
-      setAssigningTeamId(null)
-    }
+  function run(promise: Promise<unknown>, success: string) {
+    setMessage(null)
+    promise.then(() => setMessage({ tone: "green", text: success })).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
   }
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Submissions</h1>
-        <p className="text-sm tracking-tighter text-muted-foreground">
-          Review project submissions from participant dashboards.
-        </p>
-      </div>
-
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
-          <div className="mb-4">
-            <h2 className="text-lg font-semibold tracking-tight">Project submissions</h2>
-            {loadError || assignError ? <p role="alert" className="text-sm text-red-600">{loadError || assignError}</p> : null}
-            <p className="text-sm tracking-tighter text-muted-foreground">
-              {submissions.length} submission{submissions.length === 1 ? "" : "s"}
-            </p>
-          </div>
-
-          <Table className="min-w-[1120px]">
-            <TableCaption className="sr-only">
-              Project submissions with links, project timing, and review status.
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="h-10 normal-case tracking-tighter">Team</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Project name</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Submission links</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Start time</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">End time</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Status</TableHead>
-                <TableHead className="h-10 text-right normal-case tracking-tighter">Assign</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {submissions.length ? submissions.map((submission) => (
-                <TableRow key={submission.teamId}>
-                  <TableCell>{submission.teamName}</TableCell>
-                  <TableCell>{submission.projectName}</TableCell>
+      <PageHeader
+        title="Submissions"
+        description={round ? `Project links from paid teams. New judges are assigned to ${round.name} (${round.status.toLowerCase()}).` : "Project links from paid teams. Create a round under Rounds & Results to start judging."}
+      />
+      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+      <Panel
+        title="All submissions"
+        description={`${rows.filter((row) => row.submissionStatus === "SUBMITTED").length} final, ${rows.filter((row) => row.submissionStatus === "DRAFT").length} drafts, ${rows.filter((row) => row.submissionStatus === "NOT_STARTED").length} not started`}
+        actions={
+          <Select aria-label="Filter by status" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+            <option value="all">All statuses</option>
+            <option value="Draft">Draft / not started</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Evaluated">Evaluated</option>
+          </Select>
+        }
+      >
+        {submissions.isError ? <Notice tone="red">{errorMessage(submissions.error, "Submissions could not be loaded.")}</Notice> : null}
+        <Table className="min-w-[1100px]">
+          <TableCaption className="sr-only">Team submissions with links, status, and judges.</TableCaption>
+          <TableHeader>
+            <TableRow>
+              {["Team", "Code", "Project", "Links", "Status", "Judges", "Submitted", ""].map((label) => (
+                <TableHead key={label} className="h-10 normal-case tracking-tighter">{label}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {submissions.isPending ? (
+              <TableRow><TableCell colSpan={8}><div className="h-5 w-full animate-pulse rounded bg-zinc-100" /></TableCell></TableRow>
+            ) : visible.length ? visible.map((row) => (
+              <Fragment key={row.registrationId}>
+                <TableRow>
+                  <TableCell className="font-medium">{row.teamName}<p className="text-xs text-muted-foreground">{row.teamId}</p></TableCell>
+                  <TableCell className="font-mono text-xs">{row.anonymousCode ?? "—"}</TableCell>
+                  <TableCell>{row.projectName || "—"}</TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
-                      {submission.links.map((link) => (
-                        <a
-                          key={link.label}
-                          href={link.href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-xs tracking-tighter text-zinc-700 hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                        >
-                          {link.label}
-                          <ExternalLink className="size-3" />
+                    <div className="flex flex-wrap gap-1">
+                      {row.links.length ? row.links.map((link) => (
+                        <a key={link.label} href={link.href} target="_blank" rel="noopener noreferrer nofollow" className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs hover:bg-zinc-200">
+                          {link.label}<ExternalLink className="size-3" />
                         </a>
-                      ))}
+                      )) : "—"}
                     </div>
                   </TableCell>
-                  <TableCell>{formatDateTime(submission.startTime)}</TableCell>
-                  <TableCell>{formatDateTime(submission.endTime)}</TableCell>
+                  <TableCell><Badge tone={statusTone[row.status]}>{row.status}</Badge>{row.evaluations ? <p className="text-xs text-muted-foreground">{row.evaluations} score{row.evaluations === 1 ? "" : "s"}</p> : null}</TableCell>
                   <TableCell>
-                    <span className={`rounded-md px-2 py-1 text-xs tracking-tighter ${statusClassName[submission.status]}`}>
-                      {submission.status}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      {row.judges.map((judge) => (
+                        <span key={judge.assignmentId} className="text-xs">{judge.display_name} <StatusBadge status={judge.scorecardStatus} /></span>
+                      ))}
+                      {canAssign && row.canAssign && evaluators.data ? (
+                        <Select
+                          aria-label={`Add a judge for ${row.teamName}`}
+                          value=""
+                          disabled={assign.isPending}
+                          onChange={(event) => {
+                            const email = event.target.value
+                            if (email) run(assign.mutateAsync({ registrationId: row.registrationId, email }), "Judge assigned.")
+                          }}
+                          className="h-7 text-xs"
+                        >
+                          <option value="">Add judge…</option>
+                          {evaluators.data.evaluators
+                            .filter((judge) => !row.judges.some((slot) => slot.email === judge.email))
+                            .map((judge) => <option key={judge.email} value={judge.email}>{judge.display_name} ({judge.assignments})</option>)}
+                        </Select>
+                      ) : null}
+                    </div>
                   </TableCell>
+                  <TableCell className="text-xs">{dateTime(row.endTime)}<p className="text-muted-foreground">updated {dateTime(row.updatedAt)}</p></TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <RichButton
-                            type="button"
-                            color="zinc"
-                            size="sm"
-                            disabled={!submission.canAssign || assigningTeamId === submission.teamId}
-                            className="font-pixel-square tracking-tighter"
-                          >
-                            {submission.assignedTo?.display_name ?? "Assign"}
-                          </RichButton>
-                        }
-                      />
-                      <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl">
-                        <DropdownMenuGroup>
-                          <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
-                            Assign evaluator
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          {evaluators.length ? evaluators.map((evaluator) => (
-                            <DropdownMenuItem
-                              key={evaluator.email}
-                              onClick={() => void assignEvaluator(submission, evaluator)}
-                              className="font-pixel-square normal-case tracking-tighter"
-                            >
-                              {evaluator.display_name}
-                            </DropdownMenuItem>
-                          )) : <DropdownMenuItem disabled>No evaluators available</DropdownMenuItem>}
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button onClick={() => setExpanded((current) => current === row.registrationId ? null : row.registrationId)} aria-expanded={expanded === row.registrationId}>
+                      {expanded === row.registrationId ? "Hide" : "Details"}
+                    </Button>
                   </TableCell>
                 </TableRow>
-              )) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    {loadError || "Loading submissions..."}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </section>
+                {expanded === row.registrationId ? (
+                  <TableRow className="bg-zinc-50 hover:bg-zinc-50">
+                    <TableCell colSpan={8} className="whitespace-normal p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <p className="max-w-3xl whitespace-pre-wrap text-sm">{row.description || "No description provided."}</p>
+                        {row.submissionStatus === "SUBMITTED" && can.eventControl(roles) ? (
+                          <ConfirmButton confirmLabel="Reopen for editing" disabled={reopen.isPending}
+                            onConfirm={() => run(reopen.mutateAsync(row.registrationId), "Submission reopened; the team can edit and finalize again.")}>
+                            Reopen submission
+                          </ConfirmButton>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </Fragment>
+            )) : (
+              <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No submissions match this filter.</TableCell></TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Panel>
     </div>
   )
 }

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
+
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { useQuery } from "@tanstack/react-query"
 
@@ -40,13 +42,28 @@ const JUDGING_AREAS = [["rounds"], ["board"], ["results"], ["submissions"], ["ev
 const REASONS: Record<string, string> = { not_enough_evaluations: "Needs more scorecards", balance_due: "Balance due" }
 
 export default function RoundsPage() {
+  return (
+    <Suspense fallback={<LoadingRows />}>
+      <Rounds />
+    </Suspense>
+  )
+}
+
+function Rounds() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
   const me = useMe()
   const roles = me.data?.user.roles ?? []
   const rounds = useAdminQuery<{ items: Round[] }>(keys.rounds, "/api/admin/rounds", { refetchInterval: 30_000 })
-  const [selected, setSelected] = useState<string | null>(null)
   const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const items = rounds.data?.items ?? []
-  const roundId = selected ?? items.find((item) => item.status === "OPEN")?.id ?? items[items.length - 1]?.id ?? null
+  // The round lives in the URL so a reload (or a shared link) never silently switches rounds;
+  // without one, default to the newest open round, then the newest round.
+  const requested = params?.get("round")
+  const roundId = (requested && items.some((item) => item.id === requested) ? requested : null)
+    ?? [...items].reverse().find((item) => item.status === "OPEN")?.id ?? items[items.length - 1]?.id ?? null
+  const setSelected = (id: string) => router.replace(`${pathname}?round=${encodeURIComponent(id)}`, { scroll: false })
   const round = items.find((item) => item.id === roundId) ?? null
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type Announcement = {
   id: string
@@ -30,7 +31,6 @@ export default function AnnouncementsPage() {
   const editable = can.eventControl(me.data?.user.roles ?? [])
   const list = useAdminQuery<{ items: Announcement[] }>(keys.announcements, "/api/admin/announcements", { refetchInterval: 60_000 })
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null)
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const create = useAdminMutation<Draft>((body) => ({ path: "/api/admin/announcements", body }), AREA)
   const update = useAdminMutation<{ id: string; draft: Draft }>(({ id, draft }) => ({ path: `/api/admin/announcements/${id}`, method: "PATCH", body: draft }), AREA)
   const publish = useAdminMutation<string>((id) => ({ path: `/api/admin/announcements/${id}/publish` }), AREA)
@@ -38,8 +38,7 @@ export default function AnnouncementsPage() {
   const remove = useAdminMutation<string>((id) => ({ path: `/api/admin/announcements/${id}`, method: "DELETE" }), AREA)
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {
-    setMessage(null)
-    promise.then(() => { after?.(); setMessage({ tone: "green", text: success }) }).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success, after)
   }
 
   const items = list.data?.items ?? []
@@ -53,7 +52,6 @@ export default function AnnouncementsPage() {
         description="Published announcements appear as notifications on every paid team's dashboard."
         actions={editable && !editing ? <Button tone="green" onClick={() => setEditing({ id: null, draft: EMPTY })}>New announcement</Button> : null}
       />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {editing && draft ? (
         <Panel title={editing.id ? "Edit announcement" : "New announcement"} description="Saved as a draft. Publishing makes it visible to teams.">
           <div className="grid gap-3">

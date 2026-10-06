@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { adminQuery, evaluatorsSchema, submissionsSchema } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type Criterion = { key: string; label: string; max_score: number; weight: number }
 type Round = {
@@ -56,7 +57,6 @@ function Rounds() {
   const me = useMe()
   const roles = me.data?.user.roles ?? []
   const rounds = useAdminQuery<{ items: Round[] }>(keys.rounds, "/api/admin/rounds", { refetchInterval: 30_000 })
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const items = rounds.data?.items ?? []
   // The round lives in the URL so a reload (or a shared link) never silently switches rounds;
   // without one, default to the newest open round, then the newest round.
@@ -67,8 +67,7 @@ function Rounds() {
   const round = items.find((item) => item.id === roundId) ?? null
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {
-    setMessage(null)
-    promise.then(() => { after?.(); setMessage({ tone: "green", text: success }) }).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success, after)
   }
 
   return (
@@ -84,7 +83,6 @@ function Rounds() {
           </Field>
         ) : null}
       />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {rounds.isError ? <Notice tone="red">{errorMessage(rounds.error, "Rounds could not be loaded.")}</Notice> : null}
       {can.assign(roles) ? <NewRound onCreated={(id) => setSelected(id)} run={run} /> : null}
       {rounds.isPending ? <LoadingRows /> : round ? (

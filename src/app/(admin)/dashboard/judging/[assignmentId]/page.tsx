@@ -8,6 +8,7 @@ import { ExternalLink } from "lucide-react"
 import { Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, Panel, StatusBadge, TextArea } from "@/components/admin/kit"
 import { errorMessage } from "@/lib/api"
 import { keys, useAdminMutation, useAdminQuery } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type Detail = {
   assignment_id: string
@@ -39,7 +40,6 @@ function ScoreForm({ data }: { data: Detail }) {
   const submit = useAdminMutation<{ scores: Record<string, number>; comments: string }>((body) => ({ path: `/api/judge/assignments/${assignmentId}/scorecard/submit`, body }), areas)
   const [scores, setScores] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(data.scores).map(([key, value]) => [key, String(value)])))
   const [comments, setComments] = useState(data.comments)
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
 
   const writable = data.round.status === "OPEN" && data.scorecard_status !== "SUBMITTED"
   const parsed = Object.fromEntries(Object.entries(scores).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)]))
@@ -49,15 +49,13 @@ function ScoreForm({ data }: { data: Detail }) {
   const preview = weight ? data.criteria.reduce((sum, criterion) => sum + ((parsed[criterion.key] ?? 0) / criterion.max_score) * criterion.weight, 0) / weight * 100 : 0
 
   function run(promise: Promise<unknown>, success: string) {
-    setMessage(null)
-    promise.then(() => setMessage({ tone: "green", text: success })).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success)
   }
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <Link href="/dashboard/judging" className="text-sm underline underline-offset-2">← All assignments</Link>
       <PageHeader title={data.project_name || "Untitled project"} description={`${data.code} · ${data.round.name}`} actions={<StatusBadge status={data.scorecard_status} />} />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {data.round.status !== "OPEN" ? <Notice tone="amber">This round is {data.round.status.toLowerCase()}; scoring is {data.round.status === "DRAFT" ? "not open yet" : "closed"}.</Notice> : null}
       <Panel title="Project">
         <p className="whitespace-pre-wrap text-sm">{data.description || "No description provided."}</p>

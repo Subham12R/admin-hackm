@@ -6,6 +6,7 @@ import { useState } from "react"
 import { Badge, Button, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type Contact = { id: string; name: string; email: string; subject: string; preview: string; status: string; assigned_to: string | null; created_at: string; updated_at: string }
 type ContactDetail = Contact & { message: string; thread: { id: string; kind: "REPLY" | "NOTE"; body: string; author: string | null; created_at: string }[] }
@@ -81,11 +82,9 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
   const update = useAdminMutation<{ status?: string; assignee_email?: string }>((body) => ({ path: `/api/admin/contacts/${id}`, method: "PATCH", body }), AREA)
   const reply = useAdminMutation<{ kind: "REPLY" | "NOTE"; body: string }>((body) => ({ path: `/api/admin/contacts/${id}/replies`, body }), AREA)
   const [text, setText] = useState("")
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {
-    setMessage(null)
-    promise.then(() => { after?.(); setMessage({ tone: "green", text: success }) }).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success, after)
   }
 
   const data = detail.data
@@ -110,7 +109,6 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
         </span>
       ) : null}
     >
-      {message ? <div className="mb-3"><Notice tone={message.tone}>{message.text}</Notice></div> : null}
       <p className="whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-sm">{data.message}</p>
       <ul className="mt-3 space-y-2">
         {data.thread.map((entry) => (

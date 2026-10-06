@@ -14,8 +14,9 @@ import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
 import { Badge, StatusBadge } from "@/components/admin/kit"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
-import { errorMessage, rupees } from "@/lib/api"
+import { rupees } from "@/lib/api"
 import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 import {
   adminQuery,
   registrationCategories,
@@ -106,7 +107,6 @@ const registrationColumns: readonly RegistrationColumn[] = [
 export default function TeamsPage() {
   const me = useMe()
   const canReview = can.review(me.data?.user.roles ?? [])
-  const [reviewError, setReviewError] = useState("")
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
@@ -168,12 +168,7 @@ export default function TeamsPage() {
   }
 
   async function reviewTeam(registrationId: string, status: "PENDING" | "VERIFIED" | "DECLINED") {
-    setReviewError("")
-    try {
-      await review.mutateAsync({ registrationId, status })
-    } catch (error) {
-      setReviewError(errorMessage(error, "Team review could not be saved."))
-    }
+    await notify(review.mutateAsync({ registrationId, status }), status === "VERIFIED" ? "Team verified." : status === "DECLINED" ? "Team declined." : "Team moved back to pending.")
   }
 
   return (
@@ -226,7 +221,7 @@ export default function TeamsPage() {
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">All teams</h2>
-              {loadError || reviewError ? <p role="alert" className="text-sm text-red-600">{loadError || reviewError}</p> : null}
+              {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
                 {data?.total ?? 0} matching team{data?.total === 1 ? "" : "s"}
               </p>

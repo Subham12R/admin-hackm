@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Geist_Pixel } from "next/font/google"
 import type { ReactNode } from "react"
+import { Toaster } from "sonner"
 
 import "./globals.css"
 
@@ -25,7 +26,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${geistPixel.variable} overscroll-none antialiased font-sans`}
     >
-      <body className="overscroll-none">{children}</body>
+      <body className="overscroll-none">
+        {children}
+        <Toaster position="top-right" richColors closeButton toastOptions={{ className: "font-pixel-square tracking-tighter" }} />
+      </body>
     </html>
   )
 }

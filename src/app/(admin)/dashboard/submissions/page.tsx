@@ -10,6 +10,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { adminQuery, evaluatorsSchema, submissionsSchema, toSubmissions, type Submission } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 const statusTone = { Draft: "zinc", Submitted: "amber", Evaluated: "green" } as const
 
@@ -28,7 +29,6 @@ export default function SubmissionsPage() {
     queryFn: adminQuery("/api/admin/evaluators", evaluatorsSchema),
     enabled: canAssign,
   })
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | Submission["status"]>("all")
   const assign = useAdminMutation<{ registrationId: string; email: string }>(
@@ -42,8 +42,7 @@ export default function SubmissionsPage() {
   const round = submissions.data?.round
 
   function run(promise: Promise<unknown>, success: string) {
-    setMessage(null)
-    promise.then(() => setMessage({ tone: "green", text: success })).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success)
   }
 
   return (
@@ -52,7 +51,6 @@ export default function SubmissionsPage() {
         title="Submissions"
         description={round ? `Project links from paid teams. New judges are assigned to ${round.name} (${round.status.toLowerCase()}).` : "Project links from paid teams. Create a round under Rounds & Results to start judging."}
       />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Panel
         title="All submissions"
         description={`${rows.filter((row) => row.submissionStatus === "SUBMITTED").length} final, ${rows.filter((row) => row.submissionStatus === "DRAFT").length} drafts, ${rows.filter((row) => row.submissionStatus === "NOT_STARTED").length} not started`}

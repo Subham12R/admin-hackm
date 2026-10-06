@@ -9,6 +9,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { adminQuery, evaluationsSchema, toEvaluations } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 export default function EvaluationsPage() {
   const me = useMe()
@@ -22,7 +23,6 @@ export default function EvaluationsPage() {
   const reopen = useAdminMutation<string>((id) => ({ path: `/api/admin/scorecards/${id}/reopen` }), [["evaluations"], ["submissions"], ["board"], ["results"]])
   const [round, setRound] = useState("all")
   const [search, setSearch] = useState("")
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
 
   const rows = evaluations.data ?? []
   const rounds = [...new Map(rows.map((row) => [row.roundId, row.round])).entries()]
@@ -37,7 +37,6 @@ export default function EvaluationsPage() {
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="Evaluations" description="Submitted scorecards. Totals are weighted percentages of each round's rubric." />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Panel
         title="Scorecards"
         description={`${visible.length} of ${rows.length} scorecards`}
@@ -91,10 +90,7 @@ export default function EvaluationsPage() {
                     {canReopen ? (
                       <ConfirmButton confirmLabel="Reopen" disabled={reopen.isPending}
                         onConfirm={() => {
-                          setMessage(null)
-                          reopen.mutateAsync(row.scorecardId)
-                            .then(() => setMessage({ tone: "green", text: "Scorecard reopened; the judge can edit and resubmit." }))
-                            .catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+                          void notify(reopen.mutateAsync(row.scorecardId), "Scorecard reopened; the judge can edit and resubmit.")
                         }}>
                         Reopen
                       </ConfirmButton>

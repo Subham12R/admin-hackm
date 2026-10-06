@@ -5,6 +5,7 @@ import { useState } from "react"
 import { Button, Field, LoadingRows, Notice, PageHeader, Panel, StatusBadge, TextInput } from "@/components/admin/kit"
 import { dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type Window = { opens_at: string | null; closes_at: string | null; state: "OPEN" | "NOT_OPEN" | "CLOSED" }
 export type EventConfig = {
@@ -61,23 +62,18 @@ function ScheduleEditor({ config, editable, saved }: { config: EventConfig; edit
   const [initial] = useState(() => fromConfig(config))
   const [form, setForm] = useState(initial)
   const [name, setName] = useState(config.name)
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const changed = FIELDS.filter(([key]) => form[key] !== initial[key])
 
   function submit() {
     const body: Partial<Record<FieldKey | "name", string | null>> = {}
     for (const [key] of changed) body[key] = fromLocalInput(form[key])
     if (name.trim() && name.trim() !== config.name) body.name = name.trim()
-    setMessage(null)
-    save.mutateAsync(body)
-      .then(() => saved())
-      .catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(save.mutateAsync(body), "Schedule saved. The server enforces the new times now.", saved)
   }
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="Event Control" description="Times the server enforces for registration, submissions, and the problem statement. All times are IST." />
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <div className="grid gap-4 md:grid-cols-3">
         <Panel title="Registration" description={windowText(config.registration)}><StatusBadge status={config.registration.state} /></Panel>
         <Panel title="Submissions" description={windowText(config.submission)}><StatusBadge status={config.submission.state} /></Panel>

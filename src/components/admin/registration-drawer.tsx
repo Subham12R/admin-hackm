@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, StatusBadge, TextInput } from "@/components/admin/kit"
 import { dateTime, errorMessage, rupees } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 export type RegistrationDetail = {
   registration_id: string
@@ -76,7 +77,6 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
   const me = useMe()
   const roles = me.data?.user.roles ?? []
   const detail = useAdminQuery<RegistrationDetail>(keys.registration(registrationId), `/api/admin/registrations/${registrationId}`)
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
 
   const acmReview = useAdminMutation<{ memberId: string; status: string }>(
     ({ memberId, status }) => ({ path: `/api/admin/teams/${registrationId}/members/${memberId}/acm-review`, body: { status } }),
@@ -86,8 +86,7 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
   const accept = useAdminMutation<string>((attemptId) => ({ path: `/api/admin/payments/${attemptId}/accept` }), REGISTRATION_AREAS)
 
   function report(promise: Promise<unknown>, success: string) {
-    setMessage(null)
-    promise.then(() => setMessage({ tone: "green", text: success })).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success)
   }
 
   const data = detail.data
@@ -108,7 +107,6 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
         </div>
       </SheetHeader>
 
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       <dl className="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 text-sm sm:grid-cols-4">
         <Amount label="Quoted" value={data.quoted_amount_minor} />

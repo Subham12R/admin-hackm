@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react"
+import { useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react"
 
 import { RichButton } from "@/components/rich-button"
 import { cn } from "@/lib/utils"
@@ -70,17 +70,27 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
 
 const control = "rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 disabled:bg-zinc-50 disabled:text-zinc-500"
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: ReactNode }) {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
-      {label}
+      <span className="leading-4">{label}</span>
       {children}
-      {hint ? <span className="text-[11px] text-zinc-500">{hint}</span> : null}
+      {error ? <span className="text-[11px] text-red-600">{error}</span> : hint ? <span className="text-[11px] text-zinc-500">{hint}</span> : null}
     </label>
   )
 }
 
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+/** Puts buttons on the same line as the inputs of neighbouring Fields; use in rows aligned with items-start. */
+export function FieldAction({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn("flex min-w-0 flex-col gap-1 text-xs", className)}>
+      <span aria-hidden="true" className="invisible hidden leading-4 sm:block">&nbsp;</span>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+    </div>
+  )
+}
+
+export function TextInput(props: ComponentProps<"input">) {
   return <input {...props} className={cn(control, "h-8", props.className)} />
 }
 

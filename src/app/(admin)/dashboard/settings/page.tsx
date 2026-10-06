@@ -2,10 +2,11 @@
 
 import { useState } from "react"
 
-import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Field, FieldAction, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { notify } from "@/lib/notify"
 
 type StaffMember = { id: string; email: string; display_name: string; status: string; roles: string[] }
 type Invite = { id: string; email: string; role: string; expires_at: string; created_at: string }
@@ -35,19 +36,14 @@ export default function SettingsPage() {
 
 function PasswordPanel({ email, roles }: { email?: string; roles: string[] }) {
   const [form, setForm] = useState({ current: "", next: "", confirm: "" })
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
   const [pending, setPending] = useState(false)
   const valid = form.current && form.next.length >= 8 && form.next === form.confirm
 
   async function submit() {
     setPending(true)
-    setMessage(null)
     try {
-      await api("/api/auth/password", { method: "POST", body: { current_password: form.current, new_password: form.next } })
-      setForm({ current: "", next: "", confirm: "" })
-      setMessage({ tone: "green", text: "Password changed. Other signed-in devices were signed out." })
-    } catch (error) {
-      setMessage({ tone: "red", text: errorMessage(error) })
+      await notify(api("/api/auth/password", { method: "POST", body: { current_password: form.current, new_password: form.next } }),
+        "Password changed. Other signed-in devices were signed out.", () => setForm({ current: "", next: "", confirm: "" }))
     } finally {
       setPending(false)
     }
@@ -55,12 +51,19 @@ function PasswordPanel({ email, roles }: { email?: string; roles: string[] }) {
 
   return (
     <Panel title="Your account" description={email ? `${email} · ${roles.map((role) => role.replaceAll("_", " ").toLowerCase()).join(", ")}` : undefined}>
-      {message ? <div className="mb-3"><Notice tone={message.tone}>{message.text}</Notice></div> : null}
-      <form className="grid gap-3 sm:grid-cols-3 sm:items-end" onSubmit={(event) => { event.preventDefault(); if (valid) void submit() }}>
-        <Field label="Current password"><TextInput type="password" autoComplete="current-password" value={form.current} onChange={(event) => setForm({ ...form, current: event.target.value })} /></Field>
-        <Field label="New password" hint="At least 8 characters"><TextInput type="password" autoComplete="new-password" value={form.next} onChange={(event) => setForm({ ...form, next: event.target.value })} /></Field>
-        <Field label="Repeat new password" hint={form.confirm && form.confirm !== form.next ? "Passwords do not match" : undefined}><TextInput type="password" autoComplete="new-password" value={form.confirm} onChange={(event) => setForm({ ...form, confirm: event.target.value })} /></Field>
-        <div><Button type="submit" tone="green" disabled={!valid || pending}>{pending ? "Saving…" : "Change password"}</Button></div>
+      <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); if (valid) void submit() }}>
+        <div className="grid gap-3 sm:grid-cols-3 sm:items-start">
+          <Field label="Current password"><TextInput type="password" autoComplete="current-password" value={form.current} onChange={(event) => setForm({ ...form, current: event.target.value })} /></Field>
+          <Field label="New password" hint="At least 8 characters" error={form.next && form.next.length < 8 ? "At least 8 characters" : undefined}>
+            <TextInput type="password" autoComplete="new-password" value={form.next} onChange={(event) => setForm({ ...form, next: event.target.value })} />
+          </Field>
+          <Field label="Repeat new password" error={form.confirm && form.confirm !== form.next ? "Passwords do not match" : undefined}>
+            <TextInput type="password" autoComplete="new-password" value={form.confirm} onChange={(event) => setForm({ ...form, confirm: event.target.value })} />
+          </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="submit" tone="green" disabled={!valid || pending}>{pending ? "Saving…" : "Change password"}</Button>
+        </div>
       </form>
     </Panel>
   )
@@ -73,11 +76,9 @@ function StaffPanel({ selfId }: { selfId?: string }) {
   const revoke = useAdminMutation<string>((id) => ({ path: `/api/admin/invites/${id}/revoke` }), [["staff"]])
   const [inviteForm, setInviteForm] = useState({ email: "", role: "JUDGE" })
   const [editing, setEditing] = useState<{ id: string; roles: string[] } | null>(null)
-  const [message, setMessage] = useState<{ tone: "green" | "red"; text: string } | null>(null)
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {
-    setMessage(null)
-    promise.then(() => { after?.(); setMessage({ tone: "green", text: success }) }).catch((error) => setMessage({ tone: "red", text: errorMessage(error) }))
+    void notify(promise, success, after)
   }
 
   if (staff.isError) return <Notice tone="red">{errorMessage(staff.error, "Staff could not be loaded.")}</Notice>
@@ -86,19 +87,21 @@ function StaffPanel({ selfId }: { selfId?: string }) {
 
   return (
     <>
-      {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       <Panel title="Invite staff" description="The invite link is emailed and expires after 7 days.">
-        <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => {
+        <form className="grid gap-3 sm:grid-cols-[minmax(16rem,1fr)_14rem_auto] sm:items-start" onSubmit={(event) => {
           event.preventDefault()
-          run(invite.mutateAsync({ email: inviteForm.email.trim(), role: inviteForm.role }), `Invite sent to ${inviteForm.email.trim()}.`, () => setInviteForm({ ...inviteForm, email: "" }))
+          const email = inviteForm.email.trim()
+          run(invite.mutateAsync({ email, role: inviteForm.role }), `Invite sent to ${email}.`, () => setInviteForm({ ...inviteForm, email: "" }))
         }}>
-          <Field label="Email"><TextInput type="email" required value={inviteForm.email} onChange={(event) => setInviteForm({ ...inviteForm, email: event.target.value })} className="w-64" /></Field>
+          <Field label="Email"><TextInput type="email" required value={inviteForm.email} placeholder="name@example.com" onChange={(event) => setInviteForm({ ...inviteForm, email: event.target.value })} /></Field>
           <Field label="Role" hint={ROLE_HELP[inviteForm.role]}>
             <Select value={inviteForm.role} onChange={(event) => setInviteForm({ ...inviteForm, role: event.target.value })}>
               {roleOptions.map((role) => <option key={role} value={role}>{role.replaceAll("_", " ").toLowerCase()}</option>)}
             </Select>
           </Field>
-          <Button type="submit" tone="green" disabled={!inviteForm.email.includes("@") || invite.isPending}>Send invite</Button>
+          <FieldAction>
+            <Button type="submit" tone="green" disabled={!inviteForm.email.includes("@") || invite.isPending}>{invite.isPending ? "Sending…" : "Send invite"}</Button>
+          </FieldAction>
         </form>
         {staff.data.invites.length ? (
           <ul className="mt-4 divide-y divide-zinc-100 text-sm">

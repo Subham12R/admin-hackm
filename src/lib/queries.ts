@@ -30,6 +30,8 @@ export const keys = {
   contact: (id: string) => ["contact", id] as const,
   staff: ["staff"] as const,
   judgeAssignments: ["judge-assignments"] as const,
+  checkins: (search: string) => ["checkins", search] as const,
+  gallery: ["gallery"] as const,
   judgeAssignment: (id: string) => ["judge-assignment", id] as const,
 }
 
@@ -77,4 +79,5 @@ export const can = {
   money: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   superAdmin: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   judge: (roles: string[]) => roles.includes("JUDGE"),
+  checkin: (roles: string[]) => roles.some((role) => ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "SUPPORT_ADMIN"].includes(role)),
 }

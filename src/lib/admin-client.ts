@@ -10,6 +10,12 @@ export const registrationCategories = [
 ] as const
 
 const categorySchema = z.enum(registrationCategories)
+export const finalsStatuses = ["PENDING", "ACCEPTED", "DECLINED"] as const
+export const finalsSchema = z.object({
+  status: z.enum(finalsStatuses),
+  decided_at: z.string().nullable(),
+  decided_by: z.string().nullable(),
+})
 const reviewSchema = z.object({
   status: z.enum(["PENDING", "VERIFIED", "DECLINED"]),
   reviewed_at: z.string().nullable(),
@@ -112,6 +118,7 @@ export const teamsPageSchema = z.object({
       status: z.string(),
       adjustment: z.object({ status: z.string(), amount_minor: z.number().int() }),
       review: reviewSchema,
+      finals: finalsSchema,
     })
   ),
   total: z.number().int().nonnegative(),
@@ -228,6 +235,13 @@ export type Team = Omit<Registration, "members" | "paymentStatus" | "amountMinor
   memberCount: number
   adjustment: { status: string; amountMinor: number }
   review: TeamReview
+  finals: TeamFinals
+}
+
+export type TeamFinals = {
+  status: (typeof finalsStatuses)[number]
+  decidedAt: string | null
+  decidedBy: string | null
 }
 
 export type TeamMember = {
@@ -366,6 +380,7 @@ export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
       category: team.category,
       adjustment: { status: team.adjustment.status, amountMinor: team.adjustment.amount_minor },
       review: toReview(team.review),
+      finals: toFinals(team.finals),
     })),
     total: data.total,
     page: data.page,
@@ -472,4 +487,8 @@ function paymentStatus(status: string): Registration["paymentStatus"] {
 /** Fetch + validate through the same-origin BFF; used as a TanStack Query function. */
 export function adminQuery<T>(url: string, schema: z.ZodType<T>) {
   return ({ signal }: { signal: AbortSignal }) => getAdminJson(url, schema, signal)
+}
+
+export function toFinals(data: z.infer<typeof finalsSchema>): TeamFinals {
+  return { status: data.status, decidedAt: data.decided_at, decidedBy: data.decided_by }
 }

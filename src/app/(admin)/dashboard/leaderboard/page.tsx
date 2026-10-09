@@ -12,6 +12,7 @@ import { adminQuery, evaluatorsSchema, submissionsSchema } from "@/lib/admin-cli
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
+import { useStages } from "@/lib/stages"
 
 type Criterion = { key: string; label: string; max_score: number; weight: number }
 type Round = {
@@ -25,6 +26,7 @@ type Round = {
   assignments: number
   submitted_scorecards: number
   criteria: Criterion[]
+  stage: { id: string; name: string } | null
 }
 type BoardJudge = { assignment_id: string; email: string; display_name: string; scorecard_id: string | null; scorecard_status: string }
 type Board = {
@@ -78,7 +80,7 @@ function Rounds() {
         actions={items.length ? (
           <Field label="Round">
             <Select value={roundId ?? ""} onChange={(event) => setSelected(event.target.value)}>
-              {items.map((item) => <option key={item.id} value={item.id}>{item.sequence}. {item.name} ({item.status.toLowerCase()})</option>)}
+              {items.map((item) => <option key={item.id} value={item.id}>{item.sequence}. {item.name}{item.stage ? ` · ${item.stage.name}` : ""} ({item.status.toLowerCase()})</option>)}
             </Select>
           </Field>
         ) : null}
@@ -100,13 +102,20 @@ type Run = (promise: Promise<unknown>, success: string, after?: () => void) => v
 
 function NewRound({ onCreated, run }: { onCreated: (id: string) => void; run: Run }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ name: "", scope: "ALL_SUBMITTED", min_evaluations: 1 })
+  const stages = useStages()
+  const [form, setForm] = useState({ name: "", scope: "ALL_SUBMITTED", min_evaluations: 1, stage_id: "" })
   const create = useAdminMutation<typeof form, Round>((body) => ({ path: "/api/admin/rounds", body }), JUDGING_AREAS)
+  const stageId = form.stage_id || stages.data?.items[0]?.id || ""
   if (!open) return <div><Button onClick={() => setOpen(true)}>New round</Button></div>
   return (
     <Panel title="New round" description="New rounds start as drafts with the default five-criterion rubric.">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Name"><TextInput value={form.name} maxLength={120} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Finals" /></Field>
+        <Field label="Event judged">
+          <Select value={stageId} onChange={(event) => setForm({ ...form, stage_id: event.target.value })}>
+            {(stages.data?.items ?? []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </Select>
+        </Field>
         <Field label="Who is judged">
           <Select value={form.scope} onChange={(event) => setForm({ ...form, scope: event.target.value })}>
             <option value="ALL_SUBMITTED">Every final submission</option>
@@ -117,7 +126,7 @@ function NewRound({ onCreated, run }: { onCreated: (id: string) => void; run: Ru
           <TextInput type="number" min={1} max={20} value={form.min_evaluations} onChange={(event) => setForm({ ...form, min_evaluations: Number(event.target.value) })} className="w-24" />
         </Field>
         <Button tone="green" disabled={!form.name.trim() || create.isPending}
-          onClick={() => run(create.mutateAsync({ ...form, name: form.name.trim() }).then((created) => onCreated(created.id)), "Round created.", () => setOpen(false))}>Create</Button>
+          onClick={() => run(create.mutateAsync({ ...form, name: form.name.trim(), stage_id: stageId }).then((created) => onCreated(created.id)), "Round created.", () => setOpen(false))}>Create</Button>
         <Button onClick={() => setOpen(false)}>Cancel</Button>
       </div>
     </Panel>
@@ -132,7 +141,7 @@ function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; r
   return (
     <Panel
       title={`${round.name}`}
-      description={`${round.scope === "SHORTLIST" ? "Shortlisted teams" : "Every final submission"} · ${round.assignments} assignments · ${round.submitted_scorecards} scorecards submitted`}
+      description={`${round.stage ? `${round.stage.name} · ` : ""}${round.scope === "SHORTLIST" ? "Shortlisted teams" : "Every final submission"} · ${round.assignments} assignments · ${round.submitted_scorecards} scorecards submitted`}
       actions={
         <span className="flex flex-wrap items-center gap-2">
           <StatusBadge status={round.status} />
@@ -194,7 +203,8 @@ function RoundBoard({ round, roles, run }: { round: Round; roles: string[]; run:
   const editable = can.assign(roles) && round.status !== "CLOSED"
   const board = useAdminQuery<Board>(keys.board(round.id), `/api/admin/rounds/${round.id}/board`, { refetchInterval: 30_000 })
   const judges = useQuery({ queryKey: keys.evaluators, queryFn: adminQuery("/api/admin/evaluators", evaluatorsSchema), enabled: can.assign(roles) })
-  const submissions = useQuery({ queryKey: keys.submissions, queryFn: adminQuery("/api/admin/submissions", submissionsSchema), enabled: can.assign(roles) && round.scope === "SHORTLIST" })
+  const stageId = round.stage?.id ?? ""
+  const submissions = useQuery({ queryKey: keys.submissions(stageId), queryFn: adminQuery(`/api/admin/submissions?stage_id=${encodeURIComponent(stageId)}`, submissionsSchema), enabled: can.assign(roles) && round.scope === "SHORTLIST" && Boolean(stageId) })
   const add = useAdminMutation<{ registration_id: string; judge_emails: string[] }>((body) => ({ path: `/api/admin/rounds/${round.id}/assignments`, body }), JUDGING_AREAS)
   const removeJudge = useAdminMutation<string>((id) => ({ path: `/api/admin/assignments/${id}`, method: "DELETE" }), JUDGING_AREAS)
   const auto = useAdminMutation<{ judges_per_submission: number }, { created: number }>((body) => ({ path: `/api/admin/rounds/${round.id}/auto-assign`, body }), JUDGING_AREAS)

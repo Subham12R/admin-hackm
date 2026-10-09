@@ -16,7 +16,8 @@ export const keys = {
   registration: (id: string) => ["registration", id] as const,
   paymentsReview: ["payments-review"] as const,
   teams: (params: string) => ["teams", params] as const,
-  submissions: ["submissions"] as const,
+  submissions: (stage = "", track = "") => ["submissions", stage, track] as const,
+  stages: ["stages"] as const,
   evaluators: ["evaluators"] as const,
   evaluations: ["evaluations"] as const,
   logs: (params: string) => ["logs", params] as const,
@@ -30,6 +31,8 @@ export const keys = {
   contact: (id: string) => ["contact", id] as const,
   staff: ["staff"] as const,
   judgeAssignments: ["judge-assignments"] as const,
+  checkins: (search: string) => ["checkins", search] as const,
+  gallery: ["gallery"] as const,
   judgeAssignment: (id: string) => ["judge-assignment", id] as const,
 }
 
@@ -77,4 +80,5 @@ export const can = {
   money: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   superAdmin: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   judge: (roles: string[]) => roles.includes("JUDGE"),
+  checkin: (roles: string[]) => roles.some((role) => ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "SUPPORT_ADMIN"].includes(role)),
 }

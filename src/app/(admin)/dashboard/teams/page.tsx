@@ -24,6 +24,7 @@ import {
   toTeamsPage,
   type RegistrationCategory,
   type Team as Registration,
+  type TeamFinals,
 } from "@/lib/admin-client"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -69,6 +70,7 @@ type RegistrationColumnKey =
   | "members"
   | "acm"
   | "category"
+  | "finals"
 
 type RegistrationColumn = {
   key: RegistrationColumnKey
@@ -102,7 +104,10 @@ const registrationColumns: readonly RegistrationColumn[] = [
       ),
   },
   { key: "category", label: "Category", defaultVisible: false, render: (registration: Registration) => registration.category },
+  { key: "finals", label: "Finals", render: (registration: Registration) => <StatusBadge status={registration.finals.status} label={FINALS_LABELS[registration.finals.status]} /> },
 ]
+
+const FINALS_LABELS: Record<TeamFinals["status"], string> = { PENDING: "not decided", ACCEPTED: "accepted", DECLINED: "not selected" }
 
 export default function TeamsPage() {
   const me = useMe()
@@ -110,6 +115,7 @@ export default function TeamsPage() {
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
+  const [finals, setFinals] = useState<TeamFinals["status"] | "all">("all")
   const [page, setPage] = useState(1)
   const [expandedRegistration, setExpandedRegistration] = useState<string | null>(null)
   const [selectedColumns, setSelectedColumns] = useState<RegistrationColumnKey[]>(
@@ -121,6 +127,7 @@ export default function TeamsPage() {
   const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
   if (date) params.set("date", format(date, "yyyy-MM-dd"))
   if (category !== "all") params.set("category", category)
+  if (finals !== "all") params.set("finals", finals)
   const query = useQuery({
     queryKey: keys.teams(params.toString()),
     queryFn: adminQuery(`/api/admin/teams?${params}`, teamsPageSchema),
@@ -134,6 +141,10 @@ export default function TeamsPage() {
     ({ registrationId, status }) => ({ path: `/api/admin/teams/${registrationId}/review`, body: { status } }),
     REGISTRATION_AREAS
   )
+  const decideFinals = useAdminMutation<{ registrationId: string; status: TeamFinals["status"] }>(
+    ({ registrationId, status }) => ({ path: `/api/admin/teams/${registrationId}/finals`, body: { status } }),
+    [...REGISTRATION_AREAS, ["checkins"]]
+  )
 
   const registrations = data?.teams ?? []
   const chartData = (data?.dailyCounts ?? []).map((point) => ({
@@ -142,7 +153,7 @@ export default function TeamsPage() {
   }))
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all"
+  const hasFilters = Boolean(date) || category !== "all" || finals !== "all"
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -154,6 +165,7 @@ export default function TeamsPage() {
   function clearFilters() {
     setDate(undefined)
     setCategory("all")
+    setFinals("all")
     resetPage()
   }
 
@@ -165,6 +177,13 @@ export default function TeamsPage() {
 
       return current.length === 1 ? current : current.filter((key) => key !== column)
     })
+  }
+
+  async function decideTeamFinals(registrationId: string, status: TeamFinals["status"]) {
+    await notify(
+      decideFinals.mutateAsync({ registrationId, status }),
+      status === "ACCEPTED" ? "Team accepted for the finals." : status === "DECLINED" ? "Team marked as not selected." : "Finals decision cleared."
+    )
   }
 
   async function reviewTeam(registrationId: string, status: "PENDING" | "VERIFIED" | "DECLINED") {
@@ -274,6 +293,22 @@ export default function TeamsPage() {
                       {option}
                     </option>
                   ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+                Finals
+                <select
+                  value={finals}
+                  onChange={(event) => {
+                    setFinals(event.target.value as TeamFinals["status"] | "all")
+                    resetPage()
+                  }}
+                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                >
+                  <option value="all">All teams</option>
+                  <option value="ACCEPTED">Accepted for finals</option>
+                  <option value="PENDING">Not decided</option>
+                  <option value="DECLINED">Not selected</option>
                 </select>
               </label>
               <DropdownMenu>
@@ -401,6 +436,7 @@ export default function TeamsPage() {
                                     <StatusBadge status={registration.status} />
                                     {registration.adjustment.status === "REQUIRED" ? <Badge tone="amber">owes {rupees(registration.adjustment.amountMinor)}</Badge> : null}
                                     {registration.review.reviewedBy ? <Badge>reviewed by {registration.review.reviewedBy}</Badge> : null}
+                                    {registration.finals.decidedBy ? <Badge>finals set by {registration.finals.decidedBy}</Badge> : null}
                                   </p>
                                 </div>
                                 <button
@@ -427,6 +463,22 @@ export default function TeamsPage() {
                                     <option value="PENDING">Pending review</option>
                                     <option value="VERIFIED">Verified</option>
                                     <option value="DECLINED">Declined</option>
+                                  </select>
+                                </label>
+                                <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+                                  Finals
+                                  <select
+                                    aria-label={`Finals decision for ${registration.teamName}`}
+                                    value={registration.finals.status}
+                                    disabled={!canReview || (decideFinals.isPending && decideFinals.variables?.registrationId === registration.registrationId)}
+                                    onChange={(event) => {
+                                      void decideTeamFinals(registration.registrationId, event.target.value as TeamFinals["status"])
+                                    }}
+                                    className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                                  >
+                                    <option value="PENDING">Not decided</option>
+                                    <option value="ACCEPTED" disabled={registration.status !== "PAID"}>Accepted for finals</option>
+                                    <option value="DECLINED">Not selected</option>
                                   </select>
                                 </label>
                               </div>

@@ -139,10 +139,10 @@ export default function GalleryPage() {
               const draft = captions[photo.id] ?? photo.caption
               return (
                 <li key={photo.id} className="flex flex-col overflow-hidden rounded-xl border border-zinc-200">
-                  <div className="relative aspect-[4/3] bg-zinc-100">
+                  <div className="relative aspect-[4/3] shrink-0 overflow-hidden bg-zinc-100">
                     {photo.url ? (
                       // eslint-disable-next-line @next/next/no-img-element -- bucket URLs are external and already sized for the web
-                      <img src={photo.url} alt={photo.caption || "Gallery photo"} loading="lazy" className={`size-full object-cover ${photo.published ? "" : "opacity-50"}`} />
+                      <img src={photo.url} alt={photo.caption || "Gallery photo"} loading="lazy" className={`absolute inset-0 size-full object-cover ${photo.published ? "" : "opacity-50"}`} />
                     ) : null}
                     {!photo.published ? <span className="absolute left-2 top-2"><Badge tone="amber">hidden</Badge></span> : null}
                   </div>

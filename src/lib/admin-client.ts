@@ -132,6 +132,10 @@ const judgeSlotSchema = evaluatorSchema.extend({
   scorecard_status: z.string(),
 })
 
+const trackRefSchema = z.object({ id: z.string(), title: z.string() })
+const awardSchema = z.object({ id: z.string(), placement: z.number().int(), label: z.string(), track: trackRefSchema.nullable() })
+export type Award = z.infer<typeof awardSchema>
+
 export const submissionsSchema = z.object({
   submissions: z.array(
     z.object({
@@ -151,9 +155,14 @@ export const submissionsSchema = z.object({
       assigned_to: evaluatorSchema.nullable(),
       judges: z.array(judgeSlotSchema),
       can_assign: z.boolean(),
+      submission_id: z.string().nullable().default(null),
+      track: trackRefSchema.nullable().default(null),
+      awards: z.array(awardSchema).default([]),
     })
   ),
   round: z.object({ id: z.string(), name: z.string(), status: z.string() }).nullable(),
+  stage: z.object({ id: z.string(), name: z.string(), eligibility: z.string() }).nullable().default(null),
+  tracks: z.array(trackRefSchema).default([]),
 })
 
 export const evaluatorsSchema = z.object({
@@ -281,6 +290,9 @@ export type Submission = {
   assignedTo: Evaluator | null
   judges: JudgeSlot[]
   canAssign: boolean
+  submissionId: string | null
+  track: { id: string; title: string } | null
+  awards: Award[]
 }
 
 export type Evaluation = {
@@ -412,6 +424,9 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
       scorecardStatus: judge.scorecard_status,
     })),
     canAssign: submission.can_assign,
+    submissionId: submission.submission_id,
+    track: submission.track,
+    awards: submission.awards,
   }))
 }
 

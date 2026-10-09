@@ -21,7 +21,9 @@ type Photo = {
 }
 
 type Gallery = { configured: boolean; max_bytes: number; content_types: string[]; items: Photo[] }
-type SignedUpload = { object_key: string; url: string; fields: Record<string, string> }
+type SignedUpload =
+  | { object_key: string; method: "POST"; url: string; fields: Record<string, string> }
+  | { object_key: string; method: "PUT"; url: string; headers: Record<string, string> }
 type UploadState = { name: string; status: "waiting" | "uploading" | "done" | "failed"; error?: string }
 
 const AREA = [["gallery"]]
@@ -37,13 +39,19 @@ async function dimensions(file: File): Promise<{ width?: number; height?: number
   }
 }
 
-/** Sign, upload straight to S3, then register the photo. Bytes never pass through the admin app. */
-async function uploadPhoto(file: File, caption: string) {
-  const signed = await api<SignedUpload>("/api/admin/gallery/uploads", { method: "POST", body: { content_type: file.type, size_bytes: file.size } })
+/** Send the file with the presigned POST (AWS S3) or PUT (Cloudflare R2 and other S3-compatible stores). */
+function sendToStorage(signed: SignedUpload, file: File) {
+  if (signed.method === "PUT") return fetch(signed.url, { method: "PUT", headers: signed.headers, body: file })
   const form = new FormData()
   for (const [name, value] of Object.entries(signed.fields)) form.append(name, value)
   form.append("file", file)
-  const stored = await fetch(signed.url, { method: "POST", body: form }).catch(() => null)
+  return fetch(signed.url, { method: "POST", body: form })
+}
+
+/** Sign, upload straight to storage, then register the photo. Bytes never pass through the admin app. */
+async function uploadPhoto(file: File, caption: string) {
+  const signed = await api<SignedUpload>("/api/admin/gallery/uploads", { method: "POST", body: { content_type: file.type, size_bytes: file.size } })
+  const stored = await sendToStorage(signed, file).catch(() => null)
   if (!stored?.ok) throw new Error("The photo could not reach storage. Check the bucket's CORS rule.")
   await api("/api/admin/gallery", { method: "POST", body: { object_key: signed.object_key, caption, ...(await dimensions(file)) } })
 }

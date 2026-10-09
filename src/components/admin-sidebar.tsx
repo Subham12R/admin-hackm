@@ -14,7 +14,7 @@ import {
   ScrollText,
   Settings,
   SlidersHorizontal,
-  Target,
+  CalendarRange,
   Trophy,
   Upload,
   UserCheck,
@@ -76,7 +76,7 @@ const navigation: NavigationGroup[] = [
       { title: "Submissions", href: "/dashboard/submissions", icon: Upload, access: can.read },
       { title: "Evaluations", href: "/dashboard/evaluations", icon: Gavel, access: can.read },
       { title: "Rounds & Results", href: "/dashboard/leaderboard", icon: Trophy, access: can.read },
-      { title: "Challenge", href: "/dashboard/challenge", icon: Target, access: can.read },
+      { title: "Events", href: "/dashboard/events", icon: CalendarRange, access: can.read },
     ],
   },
   {

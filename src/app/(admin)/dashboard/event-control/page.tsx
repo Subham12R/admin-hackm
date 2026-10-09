@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 
 import { Button, Field, LoadingRows, Notice, PageHeader, Panel, StatusBadge, TextInput } from "@/components/admin/kit"
@@ -17,6 +18,7 @@ export type EventConfig = {
   registration: Window
   submission: Window
   challenge: { release_at: string | null; released: boolean }
+  stage?: { id: string; name: string } | null
   updated_at: string | null
   updated_by: string | null
 }
@@ -26,9 +28,6 @@ const FIELDS = [
   ["ends_at", "Hackathon ends"],
   ["registration_opens_at", "Registration opens"],
   ["registration_closes_at", "Registration closes"],
-  ["submission_opens_at", "Submissions open"],
-  ["submission_closes_at", "Submissions close"],
-  ["challenge_release_at", "Problem statement reveal"],
 ] as const
 
 type FieldKey = (typeof FIELDS)[number][0]
@@ -39,9 +38,6 @@ function fromConfig(config: EventConfig): Record<FieldKey, string> {
     ends_at: toLocalInput(config.ends_at),
     registration_opens_at: toLocalInput(config.registration.opens_at),
     registration_closes_at: toLocalInput(config.registration.closes_at),
-    submission_opens_at: toLocalInput(config.submission.opens_at),
-    submission_closes_at: toLocalInput(config.submission.closes_at),
-    challenge_release_at: toLocalInput(config.challenge.release_at),
   }
 }
 
@@ -58,7 +54,7 @@ export default function EventControlPage() {
 }
 
 function ScheduleEditor({ config, editable, saved }: { config: EventConfig; editable: boolean; saved: () => void }) {
-  const save = useAdminMutation<Partial<Record<FieldKey | "name", string | null>>>((body) => ({ path: "/api/admin/event", method: "PATCH", body }), [["event"], ["challenge"]])
+  const save = useAdminMutation<Partial<Record<FieldKey | "name", string | null>>>((body) => ({ path: "/api/admin/event", method: "PATCH", body }), [["event"], ["stages"]])
   const [initial] = useState(() => fromConfig(config))
   const [form, setForm] = useState(initial)
   const [name, setName] = useState(config.name)
@@ -73,12 +69,12 @@ function ScheduleEditor({ config, editable, saved }: { config: EventConfig; edit
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Event Control" description="Times the server enforces for registration, submissions, and the problem statement. All times are IST." />
+      <PageHeader title="Event Control" description="Hackathon dates and the registration window the server enforces. Submission times and problem statements are set per event on the Events page. All times are IST." />
       <div className="grid gap-4 md:grid-cols-3">
         <Panel title="Registration" description={windowText(config.registration)}><StatusBadge status={config.registration.state} /></Panel>
-        <Panel title="Submissions" description={windowText(config.submission)}><StatusBadge status={config.submission.state} /></Panel>
-        <Panel title="Problem statement" description={config.challenge.release_at ? `Reveals ${dateTime(config.challenge.release_at)}` : "No reveal time set; it stays hidden."}>
-          <StatusBadge status={config.challenge.released ? "RELEASED" : "LOCKED"} label={config.challenge.released ? "revealed" : "hidden"} />
+        <Panel title={`Submissions${config.stage ? ` · ${config.stage.name}` : ""}`} description={windowText(config.submission)}><StatusBadge status={config.submission.state} /></Panel>
+        <Panel title="Events" description="Submission windows, problem statements and winners for each event.">
+          <Link href="/dashboard/events" className="text-sm underline">Manage events</Link>
         </Panel>
       </div>
       <Panel

@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, Suspense, useState } from "react"
 
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Lock } from "lucide-react"
 
 import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -36,7 +36,10 @@ function Submissions() {
   const stages = useStages()
   // The event and track live in the URL so a reload or a shared link keeps the same view.
   const stageId = params?.get("event") || stages.data?.items[0]?.id || ""
-  const trackId = params?.get("track") ?? ""
+  const trackParam = params?.get("track") ?? ""
+  // "none" lists teams that have not locked a problem statement yet; it is filtered here, not by the API.
+  const unchosen = trackParam === "none"
+  const trackId = unchosen ? "" : trackParam
   const query = `stage_id=${encodeURIComponent(stageId)}${trackId ? `&track_id=${encodeURIComponent(trackId)}` : ""}`
   const submissions = useQuery({
     queryKey: keys.submissions(stageId, trackId),
@@ -69,7 +72,7 @@ function Submissions() {
   }
 
   const rows = submissions.data ? toSubmissions(submissions.data) : []
-  const visible = filter === "all" ? rows : rows.filter((row) => row.status === filter)
+  const visible = rows.filter((row) => (filter === "all" || row.status === filter) && (!unchosen || !row.track))
   const round = submissions.data?.round
   const stage = submissions.data?.stage
   const tracks = submissions.data?.tracks ?? []
@@ -92,9 +95,10 @@ function Submissions() {
               </Select>
             </Field>
             <Field label="Problem statement">
-              <Select value={trackId} onChange={(event) => select({ track: event.target.value })} disabled={!tracks.length}>
+              <Select value={trackParam} onChange={(event) => select({ track: event.target.value })} disabled={!tracks.length}>
                 <option value="">All problem statements</option>
                 {tracks.map((track) => <option key={track.id} value={track.id}>{track.title}</option>)}
+                {tracks.length > 1 ? <option value="none">Not chosen yet</option> : null}
               </Select>
             </Field>
           </div>
@@ -146,7 +150,11 @@ function Submissions() {
                   <TableCell className="font-mono text-xs">{row.anonymousCode ?? "—"}</TableCell>
                   <TableCell>
                     {row.projectName || "—"}
-                    {row.track ? <p className="text-xs text-muted-foreground">{row.track.title}</p> : null}
+                    {row.track ? (
+                      <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        {row.trackLockedAt ? <Lock className="size-3 text-amber-600" aria-label="Locked" /> : null}{row.track.title}
+                      </p>
+                    ) : tracks.length > 1 ? <p className="text-xs text-amber-700">Track not chosen</p> : null}
                     {row.awards.length ? (
                       <div className="mt-1 flex flex-wrap gap-1">
                         {row.awards.map((award) => <Badge key={award.id} tone="amber">{award.label}{award.track && !trackId ? ` · ${award.track.title}` : ""}</Badge>)}
@@ -208,6 +216,9 @@ function Submissions() {
                             busy={removeAward.isPending}
                           />
                         ) : null}
+                        {tracks.length > 1 && can.eventControl(roles) ? (
+                          <TrackControls stageId={stageId} registrationId={row.registrationId} current={row.track} tracks={tracks} hasTrackAward={row.awards.some((award) => award.track)} />
+                        ) : null}
                         {row.submissionStatus === "SUBMITTED" && can.eventControl(roles) ? (
                           <ConfirmButton confirmLabel="Reopen for editing" disabled={reopen.isPending}
                             onConfirm={() => run(reopen.mutateAsync(row.registrationId), "Submission reopened; the team can edit and finalize again.")}>
@@ -230,6 +241,44 @@ function Submissions() {
 }
 
 type AwardRow = Submission["awards"][number]
+
+/** Teams cannot undo their track choice; organisers move or unlock it here, with a reason for the audit log. */
+function TrackControls({ stageId, registrationId, current, tracks, hasTrackAward }: {
+  stageId: string
+  registrationId: string
+  current: Submission["track"]
+  tracks: { id: string; title: string }[]
+  hasTrackAward: boolean
+}) {
+  const [next, setNext] = useState(current?.id ?? "")
+  const [reason, setReason] = useState("")
+  const change = useAdminMutation<{ track_id: string | null; reason: string }>(
+    (body) => ({ path: `/api/admin/stages/${stageId}/teams/${registrationId}/track`, method: "PUT", body }), [["submissions"], ["teams"]]
+  )
+  const unchanged = next === (current?.id ?? "")
+
+  return (
+    <div className="grid gap-2 rounded-lg border border-zinc-200 bg-white p-3">
+      <p className="inline-flex items-center gap-1 text-sm font-medium"><Lock className="size-3.5" />Problem statement</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Track">
+          <Select value={next} onChange={(event) => setNext(event.target.value)}>
+            <option value="">{current ? "Unlock (team picks again)" : "Not chosen"}</option>
+            {tracks.map((track) => <option key={track.id} value={track.id}>{track.title}</option>)}
+          </Select>
+        </Field>
+        <Field label="Reason">
+          <TextInput value={reason} maxLength={300} placeholder="Team asked at the desk" className="w-48" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+        <Button tone="amber" disabled={change.isPending || unchanged || reason.trim().length < 3 || hasTrackAward}
+          title={hasTrackAward ? "Remove this team's track placing first." : undefined}
+          onClick={() => void notify(change.mutateAsync({ track_id: next || null, reason: reason.trim() }), next ? "Track changed." : "Track unlocked; the team can pick again.", () => setReason(""))}>
+          {next ? "Change track" : "Unlock"}
+        </Button>
+      </div>
+    </div>
+  )
+}
 
 /** Mark a final submission as a winner in its problem statement or across the whole event. */
 function AwardControls({ submissionId, track, awards, onRemove, busy }: {

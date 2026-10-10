@@ -4,7 +4,7 @@ import { Fragment, type ReactNode, useState } from "react"
 
 import { format } from "date-fns"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { CalendarIcon, EllipsisVertical } from "lucide-react"
+import { CalendarIcon, EllipsisVertical, Lock } from "lucide-react"
 
 import { BarChart } from "@/components/charts/bar-chart"
 import { Bar } from "@/components/charts/bar"
@@ -71,6 +71,7 @@ type RegistrationColumnKey =
   | "acm"
   | "category"
   | "finals"
+  | "tracks"
 
 type RegistrationColumn = {
   key: RegistrationColumnKey
@@ -105,7 +106,24 @@ const registrationColumns: readonly RegistrationColumn[] = [
   },
   { key: "category", label: "Category", defaultVisible: false, render: (registration: Registration) => registration.category },
   { key: "finals", label: "Finals", render: (registration: Registration) => <StatusBadge status={registration.finals.status} label={FINALS_LABELS[registration.finals.status]} /> },
+  { key: "tracks", label: "Track", render: (registration: Registration) => <TrackList tracks={registration.tracks} /> },
 ]
+
+/** The team's locked problem statement in each event that has several to choose from. */
+function TrackList({ tracks }: { tracks: Registration["tracks"] }) {
+  if (!tracks.length) return <span className="text-muted-foreground">—</span>
+  return (
+    <span className="flex flex-col gap-0.5">
+      {tracks.map((item) => (
+        <span key={item.stageId} className="inline-flex items-center gap-1 text-xs" title={item.stage}>
+          {item.track ? <Lock className="size-3 text-amber-600" aria-label="Locked" /> : null}
+          {tracks.length > 1 ? <span className="text-muted-foreground">{item.stage}:</span> : null}
+          {item.track ? item.track.title : <span className="text-amber-700">not chosen</span>}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 const FINALS_LABELS: Record<TeamFinals["status"], string> = { PENDING: "not decided", ACCEPTED: "accepted", DECLINED: "not selected" }
 

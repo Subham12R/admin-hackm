@@ -91,7 +91,7 @@ const registrationColumns: readonly RegistrationColumn[] = [
       registration.acm === "Yes" ? (
         <span className="inline-flex items-center gap-1.5">
           Yes
-          <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs tracking-tighter text-zinc-700">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tracking-tighter text-muted-foreground">
             {registration.acmMembers} ACM
           </span>
         </span>
@@ -211,8 +211,8 @@ export default function TeamsPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl bg-zinc-100 p-1">
-        <div className="rounded-xl bg-white p-4">
+      <section className="rounded-2xl glass-shell p-1">
+        <div className="rounded-xl bg-card p-4">
           <div className="mb-3">
             <h2 className="text-lg font-semibold tracking-tight">Team analytics</h2>
             <p className="text-sm tracking-tighter text-muted-foreground">
@@ -247,12 +247,12 @@ export default function TeamsPage() {
         </div>
       </section>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">All teams</h2>
-              {loadError || reviewError ? <p role="alert" className="text-sm text-red-600">{loadError || reviewError}</p> : null}
+              {loadError || reviewError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError || reviewError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
                 {data?.total ?? 0} matching team{data?.total === 1 ? "" : "s"}
               </p>
@@ -267,7 +267,7 @@ export default function TeamsPage() {
                         aria-labelledby="registration-date-label"
                         variant="outline"
                         size="sm"
-                        className="h-8 w-40 justify-start rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
+                        className="h-8 w-40 justify-start rounded-md border-input bg-background normal-case font-normal tracking-tighter"
                       />
                     }
                   >
@@ -276,7 +276,7 @@ export default function TeamsPage() {
                   </PopoverTrigger>
                   <PopoverContent
                     align="end"
-                    className="w-auto rounded-xl border border-zinc-200 bg-white p-0"
+                    className="w-auto rounded-xl border border-border bg-popover p-0"
                   >
                     <Calendar
                       mode="single"
@@ -297,7 +297,7 @@ export default function TeamsPage() {
                     setCategory(event.target.value as RegistrationCategory | "all")
                     resetPage()
                   }}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="all">All categories</option>
                   {registrationCategories.map((option) => (
@@ -314,7 +314,7 @@ export default function TeamsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
+                      className="h-8 rounded-md border-input bg-background normal-case font-normal tracking-tighter"
                     >
                       Columns
                     </Button>
@@ -322,7 +322,7 @@ export default function TeamsPage() {
                 />
                 <DropdownMenuContent
                   align="end"
-                  className="w-44 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl"
+                  className="w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
                 >
                   <DropdownMenuGroup>
                     <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
@@ -372,7 +372,7 @@ export default function TeamsPage() {
                     {column.label}
                   </TableHead>
                 ))}
-                <TableHead className="sticky right-0 z-10 h-10 bg-white">
+                <TableHead className="sticky right-0 z-10 h-10 bg-card">
                   <span className="sr-only">Team details</span>
                 </TableHead>
               </TableRow>
@@ -382,7 +382,7 @@ export default function TeamsPage() {
                 Array.from({ length: 3 }, (_, index) => (
                   <TableRow key={index} aria-hidden="true">
                     <TableCell colSpan={visibleColumns.length + 1}>
-                      <div className="h-5 w-full animate-pulse rounded bg-zinc-100" />
+                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
                     </TableCell>
                   </TableRow>
                 ))
@@ -399,7 +399,7 @@ export default function TeamsPage() {
                             {column.render(registration)}
                           </TableCell>
                         ))}
-                        <TableCell className="sticky right-0 z-10 bg-white text-right">
+                        <TableCell className="sticky right-0 z-10 bg-card text-right">
                           <Button
                             type="button"
                             variant="ghost"
@@ -419,7 +419,7 @@ export default function TeamsPage() {
                         </TableCell>
                       </TableRow>
                       {isExpanded ? (
-                        <TableRow className="bg-zinc-50 hover:bg-zinc-50">
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
                           <TableCell colSpan={visibleColumns.length + 1} className="whitespace-normal p-4">
                             <div className="space-y-4">
                               <div className="flex flex-wrap items-end justify-between gap-3">
@@ -442,7 +442,7 @@ export default function TeamsPage() {
                                         status as "VERIFIED" | "DECLINED"
                                       )
                                     }}
-                                    className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                                    className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                   >
                                     <option value="PENDING" disabled>Pending review</option>
                                     <option value="VERIFIED">Verified</option>
@@ -496,7 +496,7 @@ export default function TeamsPage() {
             </TableBody>
           </Table>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <p className="text-sm tracking-tighter text-muted-foreground">
               Showing {visibleRegistrations.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, data?.total ?? 0)} of {data?.total ?? 0}
             </p>

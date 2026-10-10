@@ -89,7 +89,7 @@ const registrationColumns: readonly RegistrationColumn[] = [
       registration.acm === "Yes" ? (
         <span className="inline-flex items-center gap-1.5">
           Yes
-          <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs tracking-tighter text-zinc-700">
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs tracking-tighter text-muted-foreground">
             {registration.acmMembers} ACM
           </span>
         </span>
@@ -105,7 +105,7 @@ const registrationColumns: readonly RegistrationColumn[] = [
       const status = registration.paymentStatus
       return (
         <span
-          className={`rounded-md px-2 py-1 text-xs tracking-tighter ${status === "Success" ? "bg-emerald-50 text-emerald-700" : status === "Pending" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}
+          className={`rounded-md px-2 py-1 text-xs tracking-tighter ${status === "Success" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : status === "Pending" ? "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300" : "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300"}`}
         >
           {status}
         </span>
@@ -191,8 +191,8 @@ export default function RegistrationsPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl bg-zinc-100 p-1">
-        <div className="rounded-xl bg-white p-4">
+      <section className="rounded-2xl glass-shell p-1">
+        <div className="rounded-xl bg-card p-4">
           <div className="mb-3">
             <h2 className="text-lg font-semibold tracking-tight">Registration analytics</h2>
             <p className="text-sm tracking-tighter text-muted-foreground">
@@ -240,12 +240,12 @@ export default function RegistrationsPage() {
         </div>
       </section>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">All registrations</h2>
-              {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
+              {loadError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
                 {data?.total ?? 0} matching registration{data?.total === 1 ? "" : "s"}
               </p>
@@ -260,7 +260,7 @@ export default function RegistrationsPage() {
                         aria-labelledby="registration-date-label"
                         variant="outline"
                         size="sm"
-                        className="h-8 w-40 justify-start rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
+                        className="h-8 w-40 justify-start rounded-md border-input bg-background normal-case font-normal tracking-tighter"
                       />
                     }
                   >
@@ -269,7 +269,7 @@ export default function RegistrationsPage() {
                   </PopoverTrigger>
                   <PopoverContent
                     align="end"
-                    className="w-auto rounded-xl border border-zinc-200 bg-white p-0"
+                    className="w-auto rounded-xl border border-border bg-popover p-0"
                   >
                     <Calendar
                       mode="single"
@@ -290,7 +290,7 @@ export default function RegistrationsPage() {
                     setCategory(event.target.value as RegistrationCategory | "all")
                     resetPage()
                   }}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="all">All categories</option>
                   {registrationCategories.map((option) => (
@@ -307,7 +307,7 @@ export default function RegistrationsPage() {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
+                      className="h-8 rounded-md border-input bg-background normal-case font-normal tracking-tighter"
                     >
                       Columns
                     </Button>
@@ -315,7 +315,7 @@ export default function RegistrationsPage() {
                 />
                 <DropdownMenuContent
                   align="end"
-                  className="w-44 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl"
+                  className="w-44 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
                 >
                   <DropdownMenuGroup>
                     <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
@@ -372,7 +372,7 @@ export default function RegistrationsPage() {
                 Array.from({ length: 3 }, (_, index) => (
                   <TableRow key={index} aria-hidden="true">
                     <TableCell colSpan={visibleColumns.length}>
-                      <div className="h-5 w-full animate-pulse rounded bg-zinc-100" />
+                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
                     </TableCell>
                   </TableRow>
                 ))
@@ -399,7 +399,7 @@ export default function RegistrationsPage() {
             </TableBody>
           </Table>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <p className="text-sm tracking-tighter text-muted-foreground">
               Showing {visibleRegistrations.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, data?.total ?? 0)} of {data?.total ?? 0}
             </p>

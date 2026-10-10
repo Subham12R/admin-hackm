@@ -57,11 +57,11 @@ export default function LogsPage() {
         </p>
       </div>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold tracking-tight">Recent activity</h2>
-            {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
+            {loadError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
             <p className="text-sm tracking-tighter text-muted-foreground">
               {auditLogs.length} recorded events
             </p>

@@ -36,9 +36,9 @@ import {
 } from "@/lib/admin-client"
 
 const statusClassName: Record<Submission["status"], string> = {
-  Draft: "bg-zinc-100 text-zinc-700",
-  Submitted: "bg-amber-50 text-amber-700",
-  Evaluated: "bg-emerald-50 text-emerald-700",
+  Draft: "bg-muted text-muted-foreground",
+  Submitted: "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300",
+  Evaluated: "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300",
 }
 
 function formatDateTime(value: string | null) {
@@ -111,11 +111,11 @@ export default function SubmissionsPage() {
         </p>
       </div>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold tracking-tight">Project submissions</h2>
-            {loadError || assignError ? <p role="alert" className="text-sm text-red-600">{loadError || assignError}</p> : null}
+            {loadError || assignError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError || assignError}</p> : null}
             <p className="text-sm tracking-tighter text-muted-foreground">
               {submissions.length} submission{submissions.length === 1 ? "" : "s"}
             </p>
@@ -149,7 +149,7 @@ export default function SubmissionsPage() {
                           href={link.href}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-1 text-xs tracking-tighter text-zinc-700 hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-xs tracking-tighter text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                         >
                           {link.label}
                           <ExternalLink className="size-3" />
@@ -179,7 +179,7 @@ export default function SubmissionsPage() {
                           </RichButton>
                         }
                       />
-                      <DropdownMenuContent align="end" className="w-48 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl">
+                      <DropdownMenuContent align="end" className="w-48 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl">
                         <DropdownMenuGroup>
                           <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
                             Assign evaluator

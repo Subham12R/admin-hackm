@@ -10,9 +10,11 @@ import {
   LayoutDashboard,
   Megaphone,
   MessageSquare,
+  Moon,
   ScrollText,
   Settings,
   SlidersHorizontal,
+  Sun,
   Target,
   Trophy,
   Upload,
@@ -39,8 +41,11 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { useTheme } from "@/hooks/use-theme"
 import FallbackAvatar from "./fallback-avatar"
 import { useEffect, useState } from "react"
 
@@ -93,6 +98,8 @@ export function AdminSidebar() {
   const pathname = usePathname() ?? ""
   const [open, setOpen] = useState(false)
   const [user, setUser] = useState({ name: "", email: "" })
+  const { theme, toggleTheme } = useTheme()
+  const isDark = theme === "dark"
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -114,90 +121,113 @@ export function AdminSidebar() {
     window.location.assign("/login")
   }
   return (
-    <Sidebar variant="inset">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              render={<Link href="/dashboard" />}
-              size="lg"
-              className="rounded-md"
-            >
-              <span className="truncate font-semibold font-pixel-square text-xl">Admin Dashboard</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-      <SidebarContent>
-        {navigation.map((group) => (
-          <SidebarGroup key={group.label || "dashboard"}>
-            {group.label && <SidebarGroupLabel className="font-pixel-square text-md capitalize">{group.label}</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`))
-                  const Icon = item.icon
-
-                  return (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        render={<Link href={item.href} />}
-                        isActive={isActive}
-                        aria-current={isActive ? "page" : undefined}
-                        className="rounded-md"
-                      >
-                        <Icon />
-                        <span className="font-pixel-square text-md">{item.title}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
-      </SidebarContent>
-      <SidebarFooter className="relative isolate mt-auto min-h-14 justify-end bg-linear-to-t from-white to-white/0 p-2 backdrop-blur-md border-t border-sidebar-border/60">
-        <SidebarMenu className="relative">
-          <SidebarMenuItem>
-            <DropdownMenu open={open} onOpenChange={setOpen}>
+    <TooltipProvider delay={150}>
+      <Sidebar variant="inset" collapsible="icon">
+        <SidebarHeader className="group-data-[collapsible=icon]:hidden">
+          <SidebarMenu>
+            <SidebarMenuItem>
               <SidebarMenuButton
-                render={<DropdownMenuTrigger />}
+                render={<Link href="/dashboard" />}
                 size="lg"
-                className="rounded-lg bg-sidebar px-2 py-1 data-popup-open:bg-sidebar-accent hover:bg-sidebar-accent cursor-pointer"
+                className="rounded-md"
               >
-                {user.name ? <FallbackAvatar name={user.name} className="border" size={24} animated /> : <span className="size-6 animate-pulse rounded-full bg-zinc-200" />}
-                <span className="min-w-0 truncate font-pixel-square text-md capitalize tracking-tighter">{user.name || <span className="inline-block h-4 w-24 animate-pulse rounded bg-zinc-200" />}</span>
-                <ChevronDown
-                  className={`ml-auto size-4 text-muted-foreground transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-                />
+                <span className="truncate font-semibold font-pixel-square text-xl">Admin Dashboard</span>
               </SidebarMenuButton>
-              <DropdownMenuContent
-                side="top"
-                sideOffset={10}
-                className="rounded-xl border border-sidebar-border/60 bg-sidebar/85 p-1 text-sidebar-foreground shadow-xl backdrop-blur-xl cursor-pointer"
-              >
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
-                    <span className="block capitalize">{user.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
-                  </DropdownMenuLabel>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={logout}
-                    className="font-pixel-square normal-case cursor-pointer rounded-md tracking-tighter"
-                  >
-                    <LogOut />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
-    </Sidebar>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          {navigation.map((group) => (
+            <SidebarGroup key={group.label || "dashboard"}>
+              {group.label && <SidebarGroupLabel className="font-pixel-square text-md capitalize">{group.label}</SidebarGroupLabel>}
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.items.map((item) => {
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`))
+                    const Icon = item.icon
+
+                    return (
+                      <SidebarMenuItem key={item.href}>
+                        <SidebarMenuButton
+                          render={<Link href={item.href} />}
+                          isActive={isActive}
+                          aria-current={isActive ? "page" : undefined}
+                          tooltip={item.title}
+                          className="rounded-md"
+                        >
+                          <Icon />
+                          <span className="font-pixel-square text-md">{item.title}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
+        </SidebarContent>
+        <SidebarFooter className="relative isolate mt-auto min-h-14 justify-end bg-linear-to-t from-sidebar to-sidebar/0 p-2 backdrop-blur-md border-t border-sidebar-border/60">
+          <SidebarMenu className="relative">
+            <SidebarMenuItem>
+              <DropdownMenu open={open} onOpenChange={setOpen}>
+                <SidebarMenuButton
+                  render={<DropdownMenuTrigger />}
+                  size="lg"
+                  className="rounded-lg bg-sidebar px-2 py-1 data-popup-open:bg-sidebar-accent hover:bg-sidebar-accent cursor-pointer group-data-[collapsible=icon]:justify-center"
+                >
+                  {user.name ? <FallbackAvatar name={user.name} className="border" size={24} animated /> : <span className="size-6 animate-pulse rounded-full bg-muted" />}
+                  <span className="min-w-0 truncate font-pixel-square text-md capitalize tracking-tighter group-data-[collapsible=icon]:hidden">{user.name || <span className="inline-block h-4 w-24 animate-pulse rounded bg-muted" />}</span>
+                  <ChevronDown
+                    className={`ml-auto size-4 text-muted-foreground transition-transform duration-200 group-data-[collapsible=icon]:hidden ${open ? "rotate-180" : ""}`}
+                  />
+                </SidebarMenuButton>
+                <DropdownMenuContent
+                  side="top"
+                  sideOffset={10}
+                  className="rounded-xl border border-sidebar-border/60 bg-sidebar/85 p-1 text-sidebar-foreground shadow-xl backdrop-blur-xl cursor-pointer"
+                >
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel className="font-pixel-square normal-case tracking-tighter">
+                      <span className="block capitalize">{user.name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{user.email}</span>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator className="bg-sidebar-border/60" />
+                    <DropdownMenuItem
+                      closeOnClick={false}
+                      onClick={toggleTheme}
+                      role="menuitemcheckbox"
+                      aria-checked={isDark}
+                      className="font-pixel-square normal-case cursor-pointer rounded-md tracking-tighter"
+                    >
+                      {isDark ? <Moon /> : <Sun />}
+                      Dark mode
+                      <span
+                        aria-hidden
+                        className={`ml-auto flex h-4 w-7 items-center rounded-full p-0.5 transition-colors duration-200 ${isDark ? "bg-primary" : "bg-muted-foreground/30"}`}
+                      >
+                        <span
+                          className={`size-3 rounded-full bg-background shadow-sm transition-transform duration-200 ${isDark ? "translate-x-3" : "translate-x-0"}`}
+                        />
+                      </span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-sidebar-border/60" />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={logout}
+                      className="font-pixel-square normal-case cursor-pointer rounded-md tracking-tighter"
+                    >
+                      <LogOut />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
+    </TooltipProvider>
   )
 }

@@ -122,7 +122,7 @@ export default function DashboardPage() {
       <p className="text-sm tracking-tighter text-muted-foreground">
         Here is a summary of your dashboard, while you were away!
       </p>
-      {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
+      {loadError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
 
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <MetricsCard
@@ -168,14 +168,14 @@ export default function DashboardPage() {
               margin={{ top: 16, right: 16, bottom: 36, left: 16 }}
             >
               <Grid horizontal numTicksRows={4} />
-              <Line dataKey="registrations" stroke="oklch(0.36 0.01 260)" />
+              <Line dataKey="registrations" stroke="var(--chart-line-strong)" />
               <XAxis numTicks={4} />
               <ChartTooltip
                 backgroundColor="var(--color-zinc-950)"
                 indicatorColor="var(--color-zinc-950)"
                 rows={(point) => [
                   {
-                    color: "oklch(0.36 0.01 260)",
+                    color: "var(--chart-line-strong)",
                     label: "Registrations",
                     value: String(point.registrations),
                   },
@@ -220,8 +220,8 @@ export default function DashboardPage() {
         </MetricsCard>
       </div>
 
-      <section className="rounded-2xl bg-zinc-100 p-1">
-        <div className="rounded-xl bg-white p-4">
+      <section className="rounded-2xl glass-shell p-1">
+        <div className="rounded-xl bg-card p-4">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
@@ -286,8 +286,8 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-zinc-100 p-1">
-        <div className="rounded-xl bg-white p-4">
+      <section className="rounded-2xl glass-shell p-1">
+        <div className="rounded-xl bg-card p-4">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">
@@ -322,7 +322,7 @@ export default function DashboardPage() {
               {recentLogs.length ? recentLogs.map((log) => (
                 <TableRow
                   key={`${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}-${log.action}`}
-                  className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100" : undefined}
+                  className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/15" : undefined}
                 >
                   <TableCell>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}</TableCell>
                   <TableCell className="font-medium">{log.actor}</TableCell>

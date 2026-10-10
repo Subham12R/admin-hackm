@@ -118,12 +118,12 @@ export default function EvaluationsPage() {
         </p>
       </div>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">Evaluation score sheet</h2>
-              {loadError ? <p role="alert" className="text-sm text-red-600">{loadError}</p> : null}
+              {loadError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
               <p aria-live="polite" className="text-sm tracking-tighter text-muted-foreground">
                 {filteredEvaluations.length} evaluation{filteredEvaluations.length === 1 ? "" : "s"}
               </p>
@@ -135,7 +135,7 @@ export default function EvaluationsPage() {
                   value={teamIdQuery}
                   onChange={(event) => setTeamIdQuery(event.target.value)}
                   placeholder="Search ID"
-                  className="h-8 w-32 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 w-32 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
@@ -143,7 +143,7 @@ export default function EvaluationsPage() {
                 <select
                   value={round}
                   onChange={(event) => setRound(event.target.value)}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="all">All rounds</option>
                   {rounds.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -154,7 +154,7 @@ export default function EvaluationsPage() {
                 <select
                   value={evaluator}
                   onChange={(event) => setEvaluator(event.target.value)}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="all">All evaluators</option>
                   {evaluators.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -165,7 +165,7 @@ export default function EvaluationsPage() {
                 <select
                   value={sort}
                   onChange={(event) => setSort(event.target.value as SortOption)}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>

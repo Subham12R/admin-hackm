@@ -2,6 +2,8 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono, Geist_Pixel } from "next/font/google"
 import type { ReactNode } from "react"
 
+import { themeScript } from "@/lib/theme"
+
 import "./globals.css"
 
 const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
@@ -24,7 +26,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${geistPixel.variable} overscroll-none antialiased font-sans`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="overscroll-none">{children}</body>
     </html>
   )

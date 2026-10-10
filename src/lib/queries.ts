@@ -31,6 +31,7 @@ export const keys = {
   contact: (id: string) => ["contact", id] as const,
   staff: ["staff"] as const,
   teamInvites: ["team-invites"] as const,
+  emailCampaigns: ["email-campaigns"] as const,
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,

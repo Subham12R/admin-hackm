@@ -111,7 +111,8 @@ export default function AnnouncementsPage() {
                     ) : (
                       <ConfirmButton confirmLabel="Hide from teams" disabled={unpublish.isPending} onConfirm={() => run(unpublish.mutateAsync(item.id), "Announcement hidden.")}>Unpublish</ConfirmButton>
                     )}
-                    {!item.published_at ? <ConfirmButton confirmLabel="Delete draft" disabled={remove.isPending} onConfirm={() => run(remove.mutateAsync(item.id), "Draft deleted.")}>Delete</ConfirmButton> : null}
+                    <ConfirmButton confirmLabel={item.published_at ? "Delete for all teams" : "Delete draft"} disabled={remove.isPending}
+                      onConfirm={() => run(remove.mutateAsync(item.id), item.published_at ? "Announcement deleted." : "Draft deleted.")}>Delete</ConfirmButton>
                   </div>
                 ) : null}
               </li>

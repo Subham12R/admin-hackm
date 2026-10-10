@@ -151,8 +151,8 @@ function Submissions() {
                   <TableCell>
                     {row.projectName || "—"}
                     {row.track ? (
-                      <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                        {row.trackLockedAt ? <Lock className="size-3 text-amber-600" aria-label="Locked" /> : null}{row.track.title}
+                      <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                        {row.trackLockedAt ? <Lock className="size-3 shrink-0 text-amber-600" aria-label="Locked" /> : null}{row.track.title}
                       </p>
                     ) : tracks.length > 1 ? <p className="text-xs text-amber-700">Track not chosen</p> : null}
                     {row.awards.length ? (

@@ -14,8 +14,9 @@ import { RichButton } from "@/components/rich-button"
 import { Badge, StatusBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
+import { TeamInvites } from "@/components/admin/team-invites"
 import { rupees } from "@/lib/api"
-import { keys } from "@/lib/queries"
+import { can, keys, useMe } from "@/lib/queries"
 import {
   adminQuery,
   registrationCategories,
@@ -138,6 +139,7 @@ const statusFilters = [
 ]
 
 export default function RegistrationsPage() {
+  const roles = useMe().data?.user.roles ?? []
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [status, setStatus] = useState("")
@@ -252,6 +254,8 @@ export default function RegistrationsPage() {
           </figure>
         </div>
       </section>
+
+      <TeamInvites canInvite={can.review(roles)} />
 
       <section className="admin-rise min-w-0 rounded-2xl glass-shell p-1">
         <div className="min-w-0 overflow-hidden rounded-xl bg-card p-3 sm:p-4">

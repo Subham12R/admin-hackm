@@ -174,6 +174,7 @@ export function AdminSidebar() {
               <DropdownMenu open={open} onOpenChange={setOpen}>
                 <SidebarMenuButton
                   render={<DropdownMenuTrigger />}
+                  aria-label={user.name ? `Account menu for ${user.name}` : "Account menu"}
                   size="lg"
                   className="rounded-lg bg-sidebar px-2 py-1 data-popup-open:bg-sidebar-accent hover:bg-sidebar-accent cursor-pointer group-data-[collapsible=icon]:justify-center"
                 >

@@ -15,6 +15,9 @@ export const finalsSchema = z.object({
   status: z.enum(finalsStatuses),
   decided_at: z.string().nullable(),
   decided_by: z.string().nullable(),
+  // Optional so an older backend still parses.
+  notified_status: z.enum(finalsStatuses).nullable().optional(),
+  rsvp_status: z.enum(["PENDING", "CONFIRMED", "DECLINED"]).optional(),
 })
 const reviewSchema = z.object({
   status: z.enum(["PENDING", "VERIFIED", "DECLINED"]),
@@ -259,6 +262,9 @@ export type TeamFinals = {
   status: (typeof finalsStatuses)[number]
   decidedAt: string | null
   decidedBy: string | null
+  /** The decision the team was last emailed; differs from `status` until the next release. */
+  notifiedStatus: (typeof finalsStatuses)[number] | null
+  rsvpStatus: "PENDING" | "CONFIRMED" | "DECLINED"
 }
 
 export type TeamMember = {
@@ -516,5 +522,8 @@ export function adminQuery<T>(url: string, schema: z.ZodType<T>) {
 }
 
 export function toFinals(data: z.infer<typeof finalsSchema>): TeamFinals {
-  return { status: data.status, decidedAt: data.decided_at, decidedBy: data.decided_by }
+  return {
+    status: data.status, decidedAt: data.decided_at, decidedBy: data.decided_by,
+    notifiedStatus: data.notified_status ?? null, rsvpStatus: data.rsvp_status ?? "PENDING",
+  }
 }

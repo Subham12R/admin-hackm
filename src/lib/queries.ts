@@ -65,7 +65,7 @@ export function useAdminMutation<TBody, TResult = unknown>(
   })
 }
 
-export type Me = { user: { id: string; email: string; display_name: string; roles: string[] } }
+export type Me = { user: { id: string; email: string; display_name: string; roles: string[]; is_owner?: boolean } }
 
 export function useMe() {
   return useAdminQuery<Me>(keys.me, "/api/auth/me")

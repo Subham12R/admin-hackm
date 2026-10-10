@@ -81,7 +81,11 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   const [initial] = useState(() => ({ name: stage.name, description: stage.description, eligibility: stage.eligibility, schedule: scheduleOf(stage) }))
   const [form, setForm] = useState(initial)
   const save = useAdminMutation<Record<string, unknown>>((body) => ({ path: `/api/admin/stages/${stage.id}`, method: "PATCH", body }), AREAS)
-  const remove = useAdminMutation<void>(() => ({ path: `/api/admin/stages/${stage.id}`, method: "DELETE" }), AREAS)
+  const remove = useAdminMutation<string>((confirm) => ({ path: `/api/admin/stages/${stage.id}?confirm=${encodeURIComponent(confirm)}`, method: "DELETE" }), AREAS)
+  const [typedName, setTypedName] = useState<string | null>(null)
+  // Events teams have worked in can only be deleted once submissions close, and only by typing the name.
+  const hasWork = stage.submitted + stage.drafts > 0
+  const closed = stage.submission_window.state === "CLOSED"
   const addTrack = useAdminMutation<{ title: string }>((body) => ({ path: `/api/admin/stages/${stage.id}/tracks`, body }), AREAS)
 
   const changedTimes = SCHEDULE.filter(([key]) => form.schedule[key] !== initial.schedule[key])
@@ -143,9 +147,26 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             <div className="flex flex-wrap items-end gap-2 md:col-span-2">
               <Button tone="green" type="submit" disabled={!dirty || !form.name.trim() || save.isPending}>{save.isPending ? "Saving…" : "Save event"}</Button>
               {dirty ? <Button onClick={() => setForm(initial)}>Discard changes</Button> : null}
-              {!only ? (
+              {!only && !hasWork ? (
                 <ConfirmButton confirmLabel="Delete event" disabled={remove.isPending}
-                  onConfirm={() => void notify(remove.mutateAsync(undefined), "Event deleted.")}>Delete</ConfirmButton>
+                  onConfirm={() => void notify(remove.mutateAsync(""), "Event deleted.")}>Delete</ConfirmButton>
+              ) : null}
+              {!only && hasWork && !closed ? (
+                <span className="pb-1.5 text-xs text-muted-foreground">Teams are still working here: hide it now, or delete it once submissions close.</span>
+              ) : null}
+              {!only && hasWork && closed ? (
+                typedName === null ? (
+                  <Button tone="red" onClick={() => setTypedName("")}>Delete event and its data</Button>
+                ) : (
+                  <span className="flex flex-wrap items-end gap-2">
+                    <Field label={`Type "${stage.name}" to delete it with ${stage.submitted + stage.drafts} submission${stage.submitted + stage.drafts === 1 ? "" : "s"}, its judging and results`}>
+                      <TextInput value={typedName} autoComplete="off" onChange={(event) => setTypedName(event.target.value)} className="w-72" />
+                    </Field>
+                    <Button tone="red" disabled={typedName !== stage.name || remove.isPending}
+                      onClick={() => void notify(remove.mutateAsync(typedName), "Event and its data deleted.")}>Delete for good</Button>
+                    <Button onClick={() => setTypedName(null)}>Cancel</Button>
+                  </span>
+                )
               ) : null}
             </div>
           ) : null}

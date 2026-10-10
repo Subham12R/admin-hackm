@@ -96,7 +96,7 @@ function AnalyticsBody({ data }: { data: Analytics }) {
             </ul>
           ) : <Empty>No paid teams yet.</Empty>}
         </Panel>
-        <Panel title="Revenue by pricing tier" description="Captured orders, before refunds.">
+        <Panel title="Revenue by pricing tier" description="Captured orders, before refunds. Newer teams pay Razorpay's fee + GST on top of the tier price, so each tier still nets its full amount.">
           {data.revenue_by_tier.length ? (
             <table className="w-full text-sm">
               <thead><tr className="text-left text-xs text-muted-foreground"><th className="py-1 font-normal">Tier</th><th className="py-1 text-right font-normal">Orders</th><th className="py-1 text-right font-normal">Amount</th></tr></thead>

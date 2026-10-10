@@ -6,6 +6,7 @@ import { useState } from "react"
 import { Button, Empty, Field, Notice, PageHeader, Panel, TextInput } from "@/components/admin/kit"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { getAdminJson, logsSchema, toAuditLogs } from "@/lib/admin-client"
+import { Bones } from "@/components/admin/bones"
 import { dateTime, errorMessage } from "@/lib/api"
 import { z } from "zod"
 
@@ -35,7 +36,7 @@ export default function LogsPage() {
         title="Activity"
         description={`${rows.length} entries loaded`}
         actions={
-          <form className="flex items-end gap-2" onSubmit={(event) => { event.preventDefault(); setApplied(action.trim()) }}>
+          <form className="flex w-full items-end gap-2 sm:w-auto" onSubmit={(event) => { event.preventDefault(); setApplied(action.trim()) }}>
             <Field label="Exact action">
               <TextInput value={action} onChange={(event) => setAction(event.target.value)} placeholder="e.g. Refund requested" />
             </Field>
@@ -44,7 +45,8 @@ export default function LogsPage() {
         }
       >
         {logs.isError ? <Notice tone="red">{errorMessage(logs.error, "Logs could not be loaded.")}</Notice> : null}
-        {!logs.isPending && !rows.length ? <Empty>No activity recorded{applied ? " for that action" : ""}.</Empty> : (
+        <Bones name="logs-table" loading={logs.isPending}>
+        {!rows.length ? <Empty>No activity recorded{applied ? " for that action" : ""}.</Empty> : (
           <Table className="min-w-[900px]">
             <TableCaption className="sr-only">Audit log entries, newest first.</TableCaption>
             <TableHeader>
@@ -53,9 +55,7 @@ export default function LogsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {logs.isPending ? (
-                <TableRow><TableCell colSpan={5}><div className="h-5 w-full animate-pulse rounded bg-zinc-100" /></TableCell></TableRow>
-              ) : rows.map((log) => (
+              {rows.map((log) => (
                 <TableRow key={log.id ?? `${log.timestamp}-${log.action}-${log.resource}`}>
                   <TableCell className="whitespace-nowrap text-xs">{dateTime(log.timestamp)}</TableCell>
                   <TableCell className="font-medium">{log.actor}</TableCell>
@@ -67,6 +67,7 @@ export default function LogsPage() {
             </TableBody>
           </Table>
         )}
+        </Bones>
         {logs.hasNextPage ? (
           <div className="mt-4 flex justify-center">
             <Button disabled={logs.isFetchingNextPage} onClick={() => void logs.fetchNextPage()}>{logs.isFetchingNextPage ? "Loading…" : "Load older entries"}</Button>

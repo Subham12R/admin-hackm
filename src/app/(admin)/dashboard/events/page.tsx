@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useState } from "react"
 
-import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { ApiError, dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
 import { can, useAdminMutation, useMe } from "@/lib/queries"
@@ -31,9 +32,13 @@ export default function EventsPage() {
         description="Each event (online round, grand finale, side challenge) has its own problem statements, submission window, submissions and winners. Teams register once and take part in every published event they qualify for."
       />
       {editable ? <NewEvent /> : null}
-      {!stages.data ? <LoadingRows rows={4} /> : stages.data.items.length ? (
-        stages.data.items.map((stage) => <StageCard key={`${stage.id}-${stage.updated_at}`} stage={stage} editable={editable} only={stages.data.items.length === 1} />)
-      ) : <Panel><Empty>No events yet.</Empty></Panel>}
+      <Bones name="events-list" loading={!stages.data}>
+        {stages.data?.items.length ? (
+          <div className="flex flex-col gap-4">
+            {stages.data.items.map((stage) => <StageCard key={`${stage.id}-${stage.updated_at}`} stage={stage} editable={editable} only={stages.data.items.length === 1} />)}
+          </div>
+        ) : <Panel><Empty>No events yet.</Empty></Panel>}
+      </Bones>
     </div>
   )
 }
@@ -188,7 +193,7 @@ function TrackEditor({ track, editable }: { track: Track; editable: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border border-zinc-200 p-3">
+    <div className="rounded-lg border border-zinc-200 p-3 transition-colors hover:border-zinc-300">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <button type="button" className="min-w-0 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
           <p className="truncate font-medium">{track.title}</p>

@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 
-import { Badge, Button, ConfirmButton, Field, FieldAction, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Field, FieldAction, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
@@ -82,11 +83,12 @@ function StaffPanel({ selfId }: { selfId?: string }) {
   }
 
   if (staff.isError) return <Notice tone="red">{errorMessage(staff.error, "Staff could not be loaded.")}</Notice>
-  if (!staff.data) return <LoadingRows rows={4} />
+  if (!staff.data) return <Bones name="settings-staff" loading>{null}</Bones>
   const roleOptions = staff.data.roles
 
   return (
-    <>
+    <Bones name="settings-staff" loading={false}>
+    <div className="flex flex-col gap-4">
       <Panel title="Invite staff" description="The invite link is emailed and expires after 7 days.">
         <form className="grid gap-3 sm:grid-cols-[minmax(16rem,1fr)_14rem_auto] sm:items-start" onSubmit={(event) => {
           event.preventDefault()
@@ -104,7 +106,7 @@ function StaffPanel({ selfId }: { selfId?: string }) {
           </FieldAction>
         </form>
         {staff.data.invites.length ? (
-          <ul className="mt-4 divide-y divide-zinc-100 text-sm">
+          <ul className="admin-stagger mt-4 divide-y divide-zinc-100 text-sm">
             {staff.data.invites.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <span>{item.email} <Badge>{item.role.replaceAll("_", " ").toLowerCase()}</Badge> <span className="text-xs text-muted-foreground">expires {dateTime(item.expires_at)}</span></span>
@@ -165,6 +167,7 @@ function StaffPanel({ selfId }: { selfId?: string }) {
           </TableBody>
         </Table>
       </Panel>
-    </>
+    </div>
+    </Bones>
   )
 }

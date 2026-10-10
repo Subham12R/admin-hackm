@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { Badge, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, TextInput } from "@/components/admin/kit"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Bones } from "@/components/admin/bones"
 import { adminQuery, evaluationsSchema, toEvaluations } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
@@ -55,7 +56,8 @@ export default function EvaluationsPage() {
         }
       >
         {evaluations.isError ? <Notice tone="red">{errorMessage(evaluations.error, "Evaluations could not be loaded.")}</Notice> : null}
-        {!evaluations.isPending && !visible.length ? <Empty>No submitted scorecards yet.</Empty> : (
+        <Bones name="evaluations-table" loading={evaluations.isPending}>
+        {!visible.length ? <Empty>No submitted scorecards yet.</Empty> : (
           <Table className="min-w-[1000px]">
             <TableCaption className="sr-only">Submitted scorecards with per-criterion scores.</TableCaption>
             <TableHeader>
@@ -72,9 +74,7 @@ export default function EvaluationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {evaluations.isPending ? (
-                <TableRow><TableCell colSpan={8}><div className="h-5 w-full animate-pulse rounded bg-zinc-100" /></TableCell></TableRow>
-              ) : visible.map((row) => (
+              {visible.map((row) => (
                 <TableRow key={row.scorecardId}>
                   <TableCell className="font-medium">{row.teamName}<p className="text-xs text-muted-foreground">{row.teamId}</p></TableCell>
                   <TableCell>{row.round}</TableCell>
@@ -101,6 +101,7 @@ export default function EvaluationsPage() {
             </TableBody>
           </Table>
         )}
+        </Bones>
       </Panel>
     </div>
   )

@@ -7,9 +7,9 @@ import { cn } from "@/lib/utils"
 
 export function PageHeader({ title, description, actions }: { title: string; description: string; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+    <div className="admin-fade flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
         <p className="text-sm tracking-tighter text-muted-foreground">{description}</p>
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -26,11 +26,11 @@ export function Panel({ title, description, actions, children, className }: {
   className?: string
 }) {
   return (
-    <section className={cn("min-w-0 rounded-2xl bg-zinc-100 p-1", className)}>
-      <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+    <section className={cn("admin-rise min-w-0 rounded-2xl bg-zinc-100 p-1", className)}>
+      <div className="min-w-0 overflow-hidden rounded-xl bg-white p-3 sm:p-4">
         {title || actions ? (
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div>
+            <div className="min-w-0">
               {title ? <h2 className="text-lg font-semibold tracking-tight">{title}</h2> : null}
               {description ? <p className="text-sm tracking-tighter text-muted-foreground">{description}</p> : null}
             </div>
@@ -135,7 +135,7 @@ export function Notice({ tone = "zinc", children }: { tone?: Tone; children: Rea
 export function LoadingRows({ rows = 3 }: { rows?: number }) {
   return (
     <div aria-hidden="true" className="space-y-2">
-      {Array.from({ length: rows }, (_, index) => <div key={index} className="h-5 w-full animate-pulse rounded bg-zinc-100" />)}
+      {Array.from({ length: rows }, (_, index) => <div key={index} className="admin-shimmer h-5 w-full rounded" />)}
     </div>
   )
 }

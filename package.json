@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bones": "boneyard-js build --no-scan && node scripts/tidy-bones.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -22,6 +23,7 @@
     "@visx/responsive": "^4.0.1-alpha.0",
     "@visx/scale": "^4.0.1-alpha.0",
     "@visx/shape": "^4.0.1-alpha.0",
+    "boneyard-js": "^1.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cn": "^0.4.0",

@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 
-import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -82,8 +83,9 @@ export default function AnnouncementsPage() {
       ) : null}
       <Panel title="All announcements" description={`${items.filter((item) => item.status === "PUBLISHED").length} published, ${items.filter((item) => item.status === "DRAFT").length} drafts`}>
         {list.isError ? <Notice tone="red">{errorMessage(list.error, "Announcements could not be loaded.")}</Notice> : null}
-        {list.isPending ? <LoadingRows /> : items.length ? (
-          <ul className="divide-y divide-zinc-100">
+        <Bones name="announcements" loading={list.isPending}>
+        {items.length ? (
+          <ul className="admin-stagger divide-y divide-zinc-100">
             {items.map((item) => (
               <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0 max-w-3xl">
@@ -116,6 +118,7 @@ export default function AnnouncementsPage() {
             ))}
           </ul>
         ) : <Empty>No announcements yet.</Empty>}
+        </Bones>
       </Panel>
     </div>
   )

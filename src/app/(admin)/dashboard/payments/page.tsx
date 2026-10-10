@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 
-import { Empty, LoadingRows, Notice, PageHeader, Panel, StatusBadge } from "@/components/admin/kit"
+import { Empty, Notice, PageHeader, Panel, StatusBadge } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { dateTime, errorMessage, rupees } from "@/lib/api"
@@ -42,7 +43,8 @@ export default function PaymentsPage() {
       <PageHeader title="Payments" description="Captured money that could not be matched to a registration automatically. Nothing here is lost; each needs a decision." />
       <Panel title="Needs review" description={`${items.length} payment${items.length === 1 ? "" : "s"} awaiting a decision`}>
         {review.isError ? <Notice tone="red">{errorMessage(review.error, "Payments could not be loaded.")}</Notice> : null}
-        {review.isPending ? <LoadingRows /> : items.length ? (
+        <Bones name="payments-review" loading={review.isPending}>
+        {items.length ? (
           <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
@@ -67,6 +69,7 @@ export default function PaymentsPage() {
             </TableBody>
           </Table>
         ) : <Empty>No payments need review.</Empty>}
+        </Bones>
       </Panel>
       <RegistrationDrawer registrationId={open} onClose={() => setOpen(null)} />
     </div>

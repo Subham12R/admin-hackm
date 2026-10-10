@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useState } from "react"
 
-import { Button, Field, LoadingRows, Notice, PageHeader, Panel, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Button, ConfirmButton, Field, Notice, PageHeader, Panel, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -15,7 +16,7 @@ export type EventConfig = {
   now: string
   starts_at: string | null
   ends_at: string | null
-  registration: Window
+  registration: Window & { enabled?: boolean }
   submission: Window
   challenge: { release_at: string | null; released: boolean }
   stage?: { id: string; name: string } | null
@@ -48,13 +49,18 @@ export default function EventControlPage() {
   const [generation, setGeneration] = useState(0)
 
   if (event.isError) return <Notice tone="red">{errorMessage(event.error, "Event settings could not be loaded.")}</Notice>
-  if (!event.data) return <LoadingRows rows={6} />
   // Background refetches update the status cards; the form keeps unsaved edits until it is saved.
-  return <ScheduleEditor key={generation} config={event.data} editable={editable} saved={() => setGeneration((value) => value + 1)} />
+  return (
+    <Bones name="event-control" loading={!event.data}>
+      {event.data ? <ScheduleEditor key={generation} config={event.data} editable={editable} saved={() => setGeneration((value) => value + 1)} /> : null}
+    </Bones>
+  )
 }
 
 function ScheduleEditor({ config, editable, saved }: { config: EventConfig; editable: boolean; saved: () => void }) {
   const save = useAdminMutation<Partial<Record<FieldKey | "name", string | null>>>((body) => ({ path: "/api/admin/event", method: "PATCH", body }), [["event"], ["stages"]])
+  const toggle = useAdminMutation<boolean>((enabled) => ({ path: "/api/admin/event", method: "PATCH", body: { registration_enabled: enabled } }), [["event"]])
+  const registrationOn = config.registration.enabled !== false
   const [initial] = useState(() => fromConfig(config))
   const [form, setForm] = useState(initial)
   const [name, setName] = useState(config.name)
@@ -71,7 +77,28 @@ function ScheduleEditor({ config, editable, saved }: { config: EventConfig; edit
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="Event Control" description="Hackathon dates and the registration window the server enforces. Submission times and problem statements are set per event on the Events page. All times are IST." />
       <div className="grid gap-4 md:grid-cols-3">
-        <Panel title="Registration" description={windowText(config.registration)}><StatusBadge status={config.registration.state} /></Panel>
+        <Panel
+          title="Registration"
+          description={registrationOn ? windowText(config.registration) : "Switched off: the landing page shows registrations closed and new teams are refused."}
+          actions={editable ? (
+            registrationOn ? (
+              <ConfirmButton confirmLabel="Close registration" disabled={toggle.isPending}
+                onConfirm={() => void notify(toggle.mutateAsync(false), "Registration closed. The landing page now shows it as closed.")}>
+                Turn off
+              </ConfirmButton>
+            ) : (
+              <Button tone="green" disabled={toggle.isPending}
+                onClick={() => void notify(toggle.mutateAsync(true), "Registration switched on. The dates above still apply.")}>
+                Turn on
+              </Button>
+            )
+          ) : null}
+        >
+          <span className="flex flex-wrap items-center gap-1.5">
+            <StatusBadge status={config.registration.state} />
+            {!registrationOn ? <StatusBadge status="DISABLED" label="switched off" /> : null}
+          </span>
+        </Panel>
         <Panel title={`Submissions${config.stage ? ` · ${config.stage.name}` : ""}`} description={windowText(config.submission)}><StatusBadge status={config.submission.state} /></Panel>
         <Panel title="Events" description="Submission windows, problem statements and winners for each event.">
           <Link href="/dashboard/events" className="text-sm underline">Manage events</Link>

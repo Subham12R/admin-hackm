@@ -31,10 +31,10 @@ export default function JudgingPage() {
           {rounds.map((round) => (
             <Panel key={round.id} title={round.name} description={round.status === "OPEN" ? "Open for scoring" : round.status === "DRAFT" ? "Not open yet; you can preview projects" : "Closed; scores are final"}
               actions={<StatusBadge status={round.status} />}>
-              <ul className="divide-y divide-zinc-100">
+              <ul className="admin-stagger divide-y divide-zinc-100">
                 {items.filter((item) => item.round.id === round.id).map((item) => (
                   <li key={item.assignment_id}>
-                    <Link href={`/dashboard/judging/${item.assignment_id}`} className="flex items-center justify-between gap-3 rounded-lg px-2 py-3 hover:bg-zinc-50">
+                    <Link href={`/dashboard/judging/${item.assignment_id}`} className="flex items-center justify-between gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-zinc-50">
                       <span>
                         <span className="font-mono text-xs text-muted-foreground">{item.code}</span>
                         <span className="block font-medium">{item.project_name || "Untitled project"}</span>

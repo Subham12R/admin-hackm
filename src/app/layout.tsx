@@ -2,6 +2,8 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono, Geist_Pixel } from "next/font/google"
 import type { ReactNode } from "react"
 import { Toaster } from "sonner"
+import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/next"
 
 import { themeScript } from "@/lib/theme"
 
@@ -35,6 +37,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="overscroll-none">
         {children}
         <Toaster position="top-right" richColors closeButton toastOptions={{ className: "font-pixel-square tracking-tighter" }} />
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )

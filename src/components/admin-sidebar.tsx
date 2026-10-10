@@ -6,6 +6,7 @@ import {
   BarChart3,
   ClipboardList,
   Gavel,
+  Images,
   LogOut,
   LayoutDashboard,
   Megaphone,
@@ -15,12 +16,15 @@ import {
   Settings,
   SlidersHorizontal,
   Sun,
-  Target,
+  CalendarRange,
   Trophy,
   Upload,
+  UserCheck,
   Users,
   type LucideIcon,
   ChevronDown,
+  ClipboardCheck,
+  Wallet,
 } from "lucide-react"
 
 import {
@@ -34,6 +38,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
@@ -49,43 +54,54 @@ import { useTheme } from "@/hooks/use-theme"
 import FallbackAvatar from "./fallback-avatar"
 import { useEffect, useState } from "react"
 
+import { can, useMe } from "@/lib/queries"
+
+type Access = (roles: string[]) => boolean
+
 type NavigationGroup = {
   label: string
-  items: { title: string; href: string; icon: LucideIcon }[]
+  items: { title: string; href: string; icon: LucideIcon; access?: Access }[]
 }
 
 const navigation: NavigationGroup[] = [
   {
     label: "",
-    items: [{ title: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
+    items: [{ title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, access: can.read }],
+  },
+  {
+    label: "Judging",
+    items: [{ title: "My Assignments", href: "/dashboard/judging", icon: ClipboardCheck, access: can.judge }],
   },
   {
     label: "Events",
     items: [
-      { title: "Registrations", href: "/dashboard/registrations", icon: ClipboardList },
-      { title: "Teams", href: "/dashboard/teams", icon: Users },
-      { title: "Submissions", href: "/dashboard/submissions", icon: Upload },
-      { title: "Evaluations", href: "/dashboard/evaluations", icon: Gavel },
-      { title: "Leaderboard", href: "/dashboard/leaderboard", icon: Trophy },
-      { title: "Challenge", href: "/dashboard/challenge", icon: Target },
+      { title: "Registrations", href: "/dashboard/registrations", icon: ClipboardList, access: can.read },
+      { title: "Payments", href: "/dashboard/payments", icon: Wallet, access: can.read },
+      { title: "Teams", href: "/dashboard/teams", icon: Users, access: can.read },
+      { title: "Check-in", href: "/dashboard/check-in", icon: UserCheck, access: can.read },
+      { title: "Submissions", href: "/dashboard/submissions", icon: Upload, access: can.read },
+      { title: "Evaluations", href: "/dashboard/evaluations", icon: Gavel, access: can.read },
+      { title: "Rounds & Results", href: "/dashboard/leaderboard", icon: Trophy, access: can.read },
+      { title: "Events", href: "/dashboard/events", icon: CalendarRange, access: can.read },
     ],
   },
   {
     label: "Communication",
     items: [
-      { title: "Contacts", href: "/dashboard/contacts", icon: MessageSquare },
-      { title: "Announcements", href: "/dashboard/announcements", icon: Megaphone },
+      { title: "Contacts", href: "/dashboard/contacts", icon: MessageSquare, access: can.read },
+      { title: "Announcements", href: "/dashboard/announcements", icon: Megaphone, access: can.read },
+      { title: "Gallery", href: "/dashboard/gallery", icon: Images, access: can.read },
     ],
   },
   {
     label: "Insights",
-    items: [{ title: "Analytics", href: "/dashboard/analytics", icon: BarChart3 }],
+    items: [{ title: "Analytics", href: "/dashboard/analytics", icon: BarChart3, access: can.read }],
   },
   {
     label: "Operations",
     items: [
-      { title: "Event Control", href: "/dashboard/event-control", icon: SlidersHorizontal },
-      { title: "Audit Logs", href: "/dashboard/logs", icon: ScrollText },
+      { title: "Event Control", href: "/dashboard/event-control", icon: SlidersHorizontal, access: can.read },
+      { title: "Audit Logs", href: "/dashboard/logs", icon: ScrollText, access: can.read },
     ],
   },
   {
@@ -97,28 +113,24 @@ const navigation: NavigationGroup[] = [
 export function AdminSidebar() {
   const pathname = usePathname() ?? ""
   const [open, setOpen] = useState(false)
-  const [user, setUser] = useState({ name: "", email: "" })
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
+  const { setOpenMobile } = useSidebar()
+  const me = useMe()
+  const user = { name: me.data?.user.display_name ?? "", email: me.data?.user.email ?? "" }
+  const roles = me.data?.user.roles ?? []
+  // Hide links the backend would refuse; until roles load, show nothing role-gated.
+  const visibleNavigation = navigation
+    .map((group) => ({ ...group, items: me.data ? group.items.filter((item) => !item.access || item.access(roles)) : [] }))
+    .filter((group) => group.items.length)
 
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then(async (response) => {
-        if (response.status === 401) {
-          window.location.assign("/login")
-          return null
-        }
-        return response.ok ? response.json() : null
-      })
-      .then((data) => {
-        if (!data?.user) return
-        setUser({ name: data.user.display_name, email: data.user.email })
-      })
-  }, [])
+  // On phones the sidebar is a sheet over the page; close it once a link has navigated.
+  useEffect(() => setOpenMobile(false), [pathname, setOpenMobile])
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" })
-    window.location.assign("/login")
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined)
+    // Full reload drops every cached query from the signed-out session.
+    window.location.replace(new URL("/login", window.location.origin))
   }
   return (
     <TooltipProvider delay={150}>
@@ -137,7 +149,13 @@ export function AdminSidebar() {
           </SidebarMenu>
         </SidebarHeader>
         <SidebarContent>
-          {navigation.map((group) => (
+          {!me.data ? (
+            // Links are role-gated, so hold their place until the signed-in roles arrive.
+            <div className="flex flex-col gap-2 p-3 group-data-[collapsible=icon]:items-center" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => <span key={index} className="admin-shimmer h-7 rounded-md group-data-[collapsible=icon]:w-8!" style={{ width: `${70 + ((index * 17) % 30)}%` }} />)}
+            </div>
+          ) : null}
+          {visibleNavigation.map((group) => (
             <SidebarGroup key={group.label || "dashboard"}>
               {group.label && <SidebarGroupLabel className="font-pixel-square text-md capitalize">{group.label}</SidebarGroupLabel>}
               <SidebarGroupContent>

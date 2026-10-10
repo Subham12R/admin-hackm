@@ -1,5 +1,6 @@
-import { AdminPlaceholder } from "@/components/admin-placeholder"
+import { redirect } from "next/navigation"
 
+/** Problem statements now belong to each event. */
 export default function ChallengePage() {
-  return <AdminPlaceholder title="Challenge" />
+  redirect("/dashboard/events")
 }

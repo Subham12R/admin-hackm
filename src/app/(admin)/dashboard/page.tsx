@@ -2,8 +2,10 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowUpRight } from "lucide-react"
+import NumberFlow, { type Format } from "@number-flow/react"
 
 import { Grid } from "@/components/charts/grid"
 import { Line, LineChart } from "@/components/charts/line-chart"
@@ -19,13 +21,15 @@ import { Pie, PieChart } from "recharts"
 
 import { RichButton } from "@/components/rich-button"
 import {
-  AdminDataError,
-  getAdminJson,
+  adminQuery,
   overviewSchema,
   registrationCategories,
   toOverview,
   type RegistrationCategory,
 } from "@/lib/admin-client"
+import { Notice } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
+import { can, keys, useMe } from "@/lib/queries"
 import {
   Table,
   TableBody,
@@ -83,27 +87,23 @@ const registrationSplitPresentation = {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [data, setData] = useState<ReturnType<typeof toOverview> | null>(null)
-  const [loadError, setLoadError] = useState("")
+  const me = useMe()
+  const roles = me.data?.user.roles
+  const staff = can.read(roles ?? [])
+  const overview = useQuery({
+    queryKey: keys.overview,
+    queryFn: adminQuery("/api/admin/overview", overviewSchema),
+    select: toOverview,
+    enabled: staff,
+    refetchInterval: 60_000,
+  })
+  const data = overview.data ?? null
+  const loadError = overview.isError ? "Dashboard data could not be loaded." : ""
 
   useEffect(() => {
-    const controller = new AbortController()
-    getAdminJson("/api/admin/overview", overviewSchema, controller.signal)
-      .then((response) => {
-        setLoadError("")
-        setData(toOverview(response))
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        if (error instanceof AdminDataError && error.status === 401) {
-          router.replace("/login")
-          return
-        }
-        setData(null)
-        setLoadError("Dashboard data could not be loaded.")
-      })
-    return () => controller.abort()
-  }, [router])
+    // Judges have no access to identity-bearing dashboards; send them to their queue.
+    if (roles && !staff && can.judge(roles)) router.replace("/dashboard/judging")
+  }, [staff, roles, router])
 
   const registrationSeries = data?.registrationSeries ?? []
   const registrationSplit = registrationCategories.map((category) => ({
@@ -113,51 +113,53 @@ export default function DashboardPage() {
   const recentRegistrations = data?.recentRegistrations ?? []
   const recentLogs = data?.recentLogs ?? []
   const metrics = data?.metrics
+  const loading = !data && !loadError
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-2 rounded-2xl p-2 font-pixel-square leading-tighter ">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Welcome Back {data?.viewerName ?? "..."}!
+      <h1 className="admin-fade flex flex-wrap items-center gap-x-2 text-xl font-semibold tracking-tight sm:text-2xl">
+        Welcome Back {data ? `${data.viewerName}!` : <span className="admin-shimmer inline-block h-7 w-36 rounded-md" aria-hidden="true" />}
       </h1>
-      <p className="text-sm tracking-tighter text-muted-foreground">
+      <p className="admin-fade text-sm tracking-tighter text-muted-foreground">
         Here is a summary of your dashboard, while you were away!
       </p>
       {loadError ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{loadError}</p> : null}
+      {metrics && metrics.paymentsNeedingReview > 0 ? (
+        <Notice tone="amber">
+          {metrics.paymentsNeedingReview} captured payment{metrics.paymentsNeedingReview === 1 ? "" : "s"} need review (late, duplicate, or mismatched).{" "}
+          <Link href="/dashboard/payments" className="underline">Open payments</Link>
+        </Notice>
+      ) : null}
 
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MetricsCard
           title="Registrations"
-          description="The total number of registrations"
+          description={metrics ? `${metrics.paidTeams.toLocaleString()} paid, the rest awaiting payment` : "Active registrations"}
         >
-          <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics ? metrics.registrations.toLocaleString() : "—"}
-          </p>
+          <Metric value={metrics?.registrations} />
         </MetricsCard>
         <MetricsCard
           title="Monetary Amount"
-          description="The total monetary amount of submissions"
+          description="Captured payments, net of refunds"
         >
-          <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics ? new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(metrics.monetaryAmountMinor / 100) : "—"}
-          </p>
+          <Metric
+            value={metrics ? metrics.monetaryAmountMinor / 100 : undefined}
+            format={{ style: "currency", currency: "INR", maximumFractionDigits: 0 }}
+          />
         </MetricsCard>
-        <MetricsCard title="Submissions" description="The total number of submissions">
-          <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics ? metrics.submissions.toLocaleString() : "—"}
-          </p>
+        <MetricsCard title="Submissions" description="Final project submissions">
+          <Metric value={metrics?.submissions} />
         </MetricsCard>
         <MetricsCard title="Total Users" description="The total number of users">
-          <p className="font-mono text-4xl font-semibold tracking-tight">
-            {metrics ? metrics.totalUsers.toLocaleString() : "—"}
-          </p>
+          <Metric value={metrics?.totalUsers} />
         </MetricsCard>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
-        <div className="col-span-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+        <div className="min-w-0 lg:col-span-3">
         <MetricsCard
           title="Registration Analytics"
-          description="New registrations over the last seven days"
+          description="Registrations per day (IST)"
 
         >
           <figure className="h-72 w-full p-3 text-left">
@@ -183,7 +185,9 @@ export default function DashboardPage() {
               />
             </LineChart>
             <figcaption className="sr-only">
-              Daily registrations from November 1 through November 7, 2026.
+              {registrationSeries.length
+                ? `Daily registrations from ${registrationSeries[0].date} to ${registrationSeries[registrationSeries.length - 1].date}.`
+                : "No registrations yet."}
             </figcaption>
           </figure>
         </MetricsCard>
@@ -220,8 +224,8 @@ export default function DashboardPage() {
         </MetricsCard>
       </div>
 
-      <section className="rounded-2xl glass-shell p-1">
-        <div className="rounded-xl bg-card p-4">
+      <section className="admin-rise min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 rounded-xl bg-card p-3 sm:p-4">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
@@ -240,6 +244,7 @@ export default function DashboardPage() {
             </RichButton>
           </div>
 
+          <Bones name="overview-registrations" loading={loading}>
           <Table>
             <TableCaption className="sr-only">
               The ten most recent HackMatrix registrations.
@@ -248,9 +253,9 @@ export default function DashboardPage() {
               <TableRow>
                 <TableHead className="h-10 normal-case tracking-tighter">Team name</TableHead>
                 <TableHead className="h-10 normal-case tracking-tighter">Team leader</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Email</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Phone</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">College</TableHead>
+                <TableHead className="hidden h-10 normal-case tracking-tighter md:table-cell">Email</TableHead>
+                <TableHead className="hidden h-10 normal-case tracking-tighter xl:table-cell">Phone</TableHead>
+                <TableHead className="hidden h-10 normal-case tracking-tighter lg:table-cell">College</TableHead>
                 <TableHead className="h-10 text-center normal-case tracking-tighter">Members</TableHead>
                 <TableHead className="h-10 normal-case tracking-tighter">ACM</TableHead>
               </TableRow>
@@ -260,9 +265,9 @@ export default function DashboardPage() {
                 <TableRow key={registration.registrationId}>
                   <TableCell className="font-medium">{registration.teamName}</TableCell>
                   <TableCell>{registration.leader}</TableCell>
-                  <TableCell>{registration.email}</TableCell>
-                  <TableCell>{registration.phone}</TableCell>
-                  <TableCell>{registration.college}</TableCell>
+                  <TableCell className="hidden md:table-cell">{registration.email}</TableCell>
+                  <TableCell className="hidden xl:table-cell">{registration.phone}</TableCell>
+                  <TableCell className="hidden lg:table-cell">{registration.college}</TableCell>
                   <TableCell className="text-center tabular-nums">{registration.members}</TableCell>
                   <TableCell>
                     <RichButton
@@ -277,17 +282,18 @@ export default function DashboardPage() {
               )) : (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    {loadError || (data ? "No registrations yet." : "Loading registrations...")}
+                    {loadError || "No registrations yet."}
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          </Bones>
         </div>
       </section>
 
-      <section className="rounded-2xl glass-shell p-1">
-        <div className="rounded-xl bg-card p-4">
+      <section className="admin-rise min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 rounded-xl bg-card p-3 sm:p-4">
           <div className="mb-4 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">
@@ -305,6 +311,7 @@ export default function DashboardPage() {
             </RichButton>
           </div>
 
+          <Bones name="overview-logs" loading={loading}>
           <Table>
             <TableCaption className="sr-only">
               The ten most recent HackMatrix admin log entries.
@@ -314,33 +321,39 @@ export default function DashboardPage() {
                 <TableHead className="h-10 normal-case tracking-tighter">Time</TableHead>
                 <TableHead className="h-10 normal-case tracking-tighter">Actor</TableHead>
                 <TableHead className="h-10 normal-case tracking-tighter">Action</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Target</TableHead>
-                <TableHead className="h-10 normal-case tracking-tighter">Details</TableHead>
+                <TableHead className="hidden h-10 normal-case tracking-tighter md:table-cell">Target</TableHead>
+                <TableHead className="hidden h-10 normal-case tracking-tighter lg:table-cell">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentLogs.length ? recentLogs.map((log) => (
                 <TableRow
-                  key={`${new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}-${log.action}`}
+                  key={log.id ?? `${log.timestamp}-${log.action}-${log.resource}`}
                   className={log.actor === "Admin" ? "bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/15" : undefined}
                 >
                   <TableCell>{new Intl.DateTimeFormat("en-IN", { dateStyle: "medium", timeStyle: "short" }).format(new Date(log.timestamp))}</TableCell>
                   <TableCell className="font-medium">{log.actor}</TableCell>
                   <TableCell>{log.action}</TableCell>
-                  <TableCell>{log.resource}</TableCell>
-                  <TableCell>{log.details}</TableCell>
+                  <TableCell className="hidden md:table-cell">{log.resource}</TableCell>
+                  <TableCell className="hidden max-w-md truncate lg:table-cell" title={log.details}>{log.details}</TableCell>
                 </TableRow>
               )) : (
                 <TableRow>
                   <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    {loadError || (data ? "No activity recorded yet." : "Loading activity...")}
+                    {loadError || "No activity recorded yet."}
                   </TableCell>
                 </TableRow>
               )}
             </TableBody>
           </Table>
+          </Bones>
         </div>
       </section>
     </div>
   )
+}
+
+function Metric({ value, format }: { value: number | undefined; format?: Format }) {
+  if (value === undefined) return <span className="admin-shimmer my-1 block h-9 w-24 rounded-md" aria-hidden="true" />
+  return <NumberFlow value={value} locales="en-IN" format={format} className="font-mono text-3xl font-semibold tracking-tight sm:text-4xl" />
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono, Geist_Pixel } from "next/font/google"
 import type { ReactNode } from "react"
+import { Toaster } from "sonner"
 
 import { themeScript } from "@/lib/theme"
 
@@ -31,7 +32,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="overscroll-none">{children}</body>
+      <body className="overscroll-none">
+        {children}
+        <Toaster position="top-right" richColors closeButton toastOptions={{ className: "font-pixel-square tracking-tighter" }} />
+      </body>
     </html>
   )
 }

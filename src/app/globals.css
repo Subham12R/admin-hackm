@@ -1368,3 +1368,64 @@ body:has(.pixel-reveal) {
     @apply font-sans;
   }
 }
+/* ── Admin motion ──────────────────────────────────────────────────────────
+ * Rows, list items and cards rise in on mount, staggered by position (capped so long
+ * tables do not trickle in). Refetches keep the same DOM nodes, so they never replay.
+ */
+@keyframes admin-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes admin-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes admin-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+[data-slot="table-body"] > tr,
+.admin-stagger > * {
+  animation: admin-rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(min(var(--admin-i, 12), 12) * 28ms);
+}
+
+[data-slot="table-body"] > tr:nth-child(1), .admin-stagger > :nth-child(1) { --admin-i: 0; }
+[data-slot="table-body"] > tr:nth-child(2), .admin-stagger > :nth-child(2) { --admin-i: 1; }
+[data-slot="table-body"] > tr:nth-child(3), .admin-stagger > :nth-child(3) { --admin-i: 2; }
+[data-slot="table-body"] > tr:nth-child(4), .admin-stagger > :nth-child(4) { --admin-i: 3; }
+[data-slot="table-body"] > tr:nth-child(5), .admin-stagger > :nth-child(5) { --admin-i: 4; }
+[data-slot="table-body"] > tr:nth-child(6), .admin-stagger > :nth-child(6) { --admin-i: 5; }
+[data-slot="table-body"] > tr:nth-child(7), .admin-stagger > :nth-child(7) { --admin-i: 6; }
+[data-slot="table-body"] > tr:nth-child(8), .admin-stagger > :nth-child(8) { --admin-i: 7; }
+[data-slot="table-body"] > tr:nth-child(9), .admin-stagger > :nth-child(9) { --admin-i: 8; }
+[data-slot="table-body"] > tr:nth-child(10), .admin-stagger > :nth-child(10) { --admin-i: 9; }
+[data-slot="table-body"] > tr:nth-child(11), .admin-stagger > :nth-child(11) { --admin-i: 10; }
+[data-slot="table-body"] > tr:nth-child(12), .admin-stagger > :nth-child(12) { --admin-i: 11; }
+
+.admin-rise {
+  animation: admin-rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.admin-fade {
+  animation: admin-fade 300ms ease-out both;
+}
+
+.admin-shimmer {
+  background-image: linear-gradient(110deg, var(--muted) 30%, color-mix(in oklch, var(--muted), var(--background) 55%) 50%, var(--muted) 70%);
+  background-size: 200% 100%;
+  animation: admin-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="table-body"] > tr,
+  .admin-stagger > *,
+  .admin-rise,
+  .admin-fade,
+  .admin-shimmer {
+    animation: none;
+  }
+}

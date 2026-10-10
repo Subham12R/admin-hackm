@@ -1,9 +1,9 @@
 "use client"
 
-import { type ReactNode, useEffect, useState } from "react"
+import { type ReactNode, useState } from "react"
 
 import { format } from "date-fns"
-import { useRouter } from "next/navigation"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { CalendarIcon } from "lucide-react"
 
 import { Area, AreaChart } from "@/components/charts/area-chart"
@@ -11,9 +11,13 @@ import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
 import { RichButton } from "@/components/rich-button"
+import { Badge, StatusBadge } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
+import { RegistrationDrawer } from "@/components/admin/registration-drawer"
+import { rupees } from "@/lib/api"
+import { keys } from "@/lib/queries"
 import {
-  AdminDataError,
-  getAdminJson,
+  adminQuery,
   registrationCategories,
   registrationsPageSchema,
   toRegistrationsPage,
@@ -66,6 +70,7 @@ type RegistrationColumnKey =
   | "acm"
   | "category"
   | "paymentStatus"
+  | "amount"
 
 type RegistrationColumn = {
   key: RegistrationColumnKey
@@ -101,63 +106,69 @@ const registrationColumns: readonly RegistrationColumn[] = [
   {
     key: "paymentStatus",
     label: "Payment status",
-    render: (registration: Registration) => {
-      const status = registration.paymentStatus
-      return (
-        <span
-          className={`rounded-md px-2 py-1 text-xs tracking-tighter ${status === "Success" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300" : status === "Pending" ? "bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300" : "bg-red-50 text-red-700 dark:bg-red-400/10 dark:text-red-300"}`}
-        >
-          {status}
-        </span>
-      )
-    },
+    render: (registration: Registration) => (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        <StatusBadge status={registration.registrationStatus} />
+        {registration.paymentNeedsReview ? <Badge tone="amber">payment review</Badge> : null}
+        {registration.adjustmentStatus === "REQUIRED" ? <Badge tone="amber">balance due</Badge> : null}
+        {registration.acmPending ? <Badge tone="blue">{registration.acmPending} ACM to check</Badge> : null}
+      </span>
+    ),
+  },
+  {
+    key: "amount",
+    label: "Amount",
+    className: "tabular-nums",
+    render: (registration: Registration) => (
+      <span>
+        {rupees(registration.amountMinor)}
+        {registration.refundedAmountMinor ? <span className="text-xs text-muted-foreground"> (−{rupees(registration.refundedAmountMinor)})</span> : null}
+      </span>
+    ),
   },
 ]
 
+const statusFilters = [
+  { value: "", label: "Active (pending + paid)" },
+  { value: "PAID", label: "Paid" },
+  { value: "PAYMENT_PENDING", label: "Awaiting payment" },
+  { value: "REFUNDED", label: "Refunded" },
+  { value: "ABANDONED", label: "Abandoned" },
+  { value: "ALL", label: "Everything" },
+]
+
 export default function RegistrationsPage() {
-  const router = useRouter()
-  const [data, setData] = useState<ReturnType<typeof toRegistrationsPage> | null>(null)
-  const [loadError, setLoadError] = useState("")
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
+  const [status, setStatus] = useState("")
+  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [selectedColumns, setSelectedColumns] = useState<RegistrationColumnKey[]>(
     registrationColumns.map((column) => column.key)
   )
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
-    if (date) params.set("date", format(date, "yyyy-MM-dd"))
-    if (category !== "all") params.set("category", category)
-
-    getAdminJson(
-      `/api/admin/registrations?${params}`,
-      registrationsPageSchema,
-      controller.signal
-    )
-      .then((response) => {
-        setLoadError("")
-        setData(toRegistrationsPage(response))
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return
-        if (error instanceof AdminDataError && error.status === 401) {
-          router.replace("/login")
-          return
-        }
-        setData(null)
-        setLoadError("Registrations could not be loaded.")
-      })
-
-    return () => controller.abort()
-  }, [category, date, page, router])
+  const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) })
+  // The backend buckets dates in the event time zone, so send the picked calendar day as-is.
+  if (date) params.set("date", format(date, "yyyy-MM-dd"))
+  if (category !== "all") params.set("category", category)
+  if (status) params.set("status", status)
+  if (search.trim()) params.set("search", search.trim())
+  const query = useQuery({
+    queryKey: keys.registrations(params.toString()),
+    queryFn: adminQuery(`/api/admin/registrations?${params}`, registrationsPageSchema),
+    select: toRegistrationsPage,
+    placeholderData: keepPreviousData,
+    refetchInterval: 30_000,
+  })
+  const data = query.data ?? null
+  const loadError = query.isError ? "Registrations could not be loaded." : ""
 
   const registrations = data?.registrations ?? []
   const chartData = data?.dailyCounts ?? []
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all"
+  const hasFilters = Boolean(date) || category !== "all" || Boolean(status) || Boolean(search)
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -169,6 +180,8 @@ export default function RegistrationsPage() {
   function clearFilters() {
     setDate(undefined)
     setCategory("all")
+    setStatus("")
+    setSearch("")
     resetPage()
   }
 
@@ -184,22 +197,22 @@ export default function RegistrationsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Registrations</h1>
+      <div className="admin-fade">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Registrations</h1>
         <p className="text-sm tracking-tighter text-muted-foreground">
           Monitor registration volume and review incoming teams.
         </p>
       </div>
 
-      <section className="rounded-2xl glass-shell p-1">
-        <div className="rounded-xl bg-card p-4">
+      <section className="admin-rise min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 rounded-xl bg-card p-3 sm:p-4">
           <div className="mb-3">
             <h2 className="text-lg font-semibold tracking-tight">Registration analytics</h2>
             <p className="text-sm tracking-tighter text-muted-foreground">
               Daily registrations from the table rows below.
             </p>
           </div>
-          <figure className="h-72 w-full text-left">
+          <figure className="h-56 w-full text-left sm:h-72">
             <AreaChart
               aspectRatio="auto"
               className="h-full"
@@ -240,8 +253,8 @@ export default function RegistrationsPage() {
         </div>
       </section>
 
-      <section className="min-w-0 rounded-2xl glass-shell p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-4">
+      <section className="admin-rise min-w-0 rounded-2xl glass-shell p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-card p-3 sm:p-4">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">All registrations</h2>
@@ -250,7 +263,26 @@ export default function RegistrationsPage() {
                 {data?.total ?? 0} matching registration{data?.total === 1 ? "" : "s"}
               </p>
             </div>
-            <div className="flex flex-wrap items-end gap-2">
+            <div className="grid w-full grid-cols-2 items-end gap-2 sm:flex sm:w-auto sm:flex-wrap">
+              <label className="col-span-2 flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+                Search
+                <input
+                  value={search}
+                  onChange={(event) => { setSearch(event.target.value); resetPage() }}
+                  placeholder="Team or leader email"
+                  className="h-8 w-full rounded-md sm:w-48 border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+                Status
+                <select
+                  value={status}
+                  onChange={(event) => { setStatus(event.target.value); resetPage() }}
+                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto"
+                >
+                  {statusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
               <div className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 <span id="registration-date-label">Registration date</span>
                 <Popover>
@@ -260,7 +292,7 @@ export default function RegistrationsPage() {
                         aria-labelledby="registration-date-label"
                         variant="outline"
                         size="sm"
-                        className="h-8 w-40 justify-start rounded-md border-input bg-background normal-case font-normal tracking-tighter"
+                        className="h-8 w-full justify-start sm:w-40 rounded-md border-input bg-background normal-case font-normal tracking-tighter"
                       />
                     }
                   >
@@ -290,7 +322,7 @@ export default function RegistrationsPage() {
                     setCategory(event.target.value as RegistrationCategory | "all")
                     resetPage()
                   }}
-                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-auto"
                 >
                   <option value="all">All categories</option>
                   {registrationCategories.map((option) => (
@@ -351,6 +383,36 @@ export default function RegistrationsPage() {
             </div>
           </div>
 
+          <Bones name="registrations-table" loading={data === null && !loadError}>
+          <ul className="admin-stagger divide-y divide-border md:hidden">
+            {visibleRegistrations.map((registration) => (
+              <li key={registration.registrationId}>
+                {/* A div, not a button: boneyard captures buttons as one solid block. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenRegistration(registration.registrationId)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpenRegistration(registration.registrationId) } }}
+                  aria-label={`Open ${registration.teamName}`}
+                  className="flex w-full cursor-pointer flex-col gap-1 rounded-lg px-1 py-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring active:bg-muted"
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium">{registration.teamName}</span>
+                    <span className="shrink-0 tabular-nums text-sm">{rupees(registration.amountMinor)}</span>
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {registration.leader} · {registration.members} member{registration.members === 1 ? "" : "s"} · {formatDate(registration.registeredAt)}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{registration.college}</span>
+                  {registrationColumns.find((column) => column.key === "paymentStatus")?.render(registration)}
+                </div>
+              </li>
+            ))}
+            {!visibleRegistrations.length ? (
+              <li className="py-8 text-center text-sm text-muted-foreground">{loadError || "No registrations match these filters."}</li>
+            ) : null}
+          </ul>
+          <div className="hidden md:block">
           <Table className="min-w-max">
             <TableCaption className="sr-only">
               Registrations with date, team, leader, contact, college, team size, ACM status, category, and payment status.
@@ -368,17 +430,16 @@ export default function RegistrationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data === null && !loadError ? (
-                Array.from({ length: 3 }, (_, index) => (
-                  <TableRow key={index} aria-hidden="true">
-                    <TableCell colSpan={visibleColumns.length}>
-                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : visibleRegistrations.length ? (
+              {visibleRegistrations.length ? (
                 visibleRegistrations.map((registration) => (
-                  <TableRow key={registration.registrationId}>
+                  <TableRow
+                    key={registration.registrationId}
+                    tabIndex={0}
+                    onClick={() => setOpenRegistration(registration.registrationId)}
+                    onKeyDown={(event) => { if (event.key === "Enter") setOpenRegistration(registration.registrationId) }}
+                    className="cursor-pointer"
+                    aria-label={`Open ${registration.teamName}`}
+                  >
                     {visibleColumns.map((column) => (
                       <TableCell key={column.key} className={column.className}>
                         {column.render(registration)}
@@ -398,6 +459,8 @@ export default function RegistrationsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          </Bones>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <p className="text-sm tracking-tighter text-muted-foreground">
@@ -431,6 +494,7 @@ export default function RegistrationsPage() {
           </div>
         </div>
       </section>
+      <RegistrationDrawer registrationId={openRegistration} onClose={() => setOpenRegistration(null)} />
     </div>
   )
 }

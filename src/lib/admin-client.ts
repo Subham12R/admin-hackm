@@ -119,6 +119,10 @@ export const teamsPageSchema = z.object({
       adjustment: z.object({ status: z.string(), amount_minor: z.number().int() }),
       review: reviewSchema,
       finals: finalsSchema,
+      // The team's locked problem statement in each event that has several.
+      tracks: z.array(z.object({
+        stage_id: z.string(), stage: z.string(), track: z.object({ id: z.string(), title: z.string() }).nullable(), locked_at: z.string().nullable(),
+      })).default([]),
     })
   ),
   total: z.number().int().nonnegative(),
@@ -157,6 +161,7 @@ export const submissionsSchema = z.object({
       can_assign: z.boolean(),
       submission_id: z.string().nullable().default(null),
       track: trackRefSchema.nullable().default(null),
+      track_locked_at: z.string().nullable().default(null),
       awards: z.array(awardSchema).default([]),
     })
   ),
@@ -245,7 +250,10 @@ export type Team = Omit<Registration, "members" | "paymentStatus" | "amountMinor
   adjustment: { status: string; amountMinor: number }
   review: TeamReview
   finals: TeamFinals
+  tracks: TeamTrack[]
 }
+
+export type TeamTrack = { stageId: string; stage: string; track: { id: string; title: string } | null; lockedAt: string | null }
 
 export type TeamFinals = {
   status: (typeof finalsStatuses)[number]
@@ -292,6 +300,7 @@ export type Submission = {
   canAssign: boolean
   submissionId: string | null
   track: { id: string; title: string } | null
+  trackLockedAt: string | null
   awards: Award[]
 }
 
@@ -393,6 +402,7 @@ export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
       adjustment: { status: team.adjustment.status, amountMinor: team.adjustment.amount_minor },
       review: toReview(team.review),
       finals: toFinals(team.finals),
+      tracks: team.tracks.map((item) => ({ stageId: item.stage_id, stage: item.stage, track: item.track, lockedAt: item.locked_at })),
     })),
     total: data.total,
     page: data.page,
@@ -426,6 +436,7 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
     canAssign: submission.can_assign,
     submissionId: submission.submission_id,
     track: submission.track,
+    trackLockedAt: submission.track_locked_at,
     awards: submission.awards,
   }))
 }

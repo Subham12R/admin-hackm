@@ -12,6 +12,7 @@ import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
 import { RichButton } from "@/components/rich-button"
 import { Badge, StatusBadge } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { rupees } from "@/lib/api"
 import { keys } from "@/lib/queries"
@@ -196,22 +197,22 @@ export default function RegistrationsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Registrations</h1>
+      <div className="admin-fade">
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Registrations</h1>
         <p className="text-sm tracking-tighter text-muted-foreground">
           Monitor registration volume and review incoming teams.
         </p>
       </div>
 
-      <section className="rounded-2xl bg-zinc-100 p-1">
-        <div className="rounded-xl bg-white p-4">
+      <section className="admin-rise min-w-0 rounded-2xl bg-zinc-100 p-1">
+        <div className="min-w-0 rounded-xl bg-white p-3 sm:p-4">
           <div className="mb-3">
             <h2 className="text-lg font-semibold tracking-tight">Registration analytics</h2>
             <p className="text-sm tracking-tighter text-muted-foreground">
               Daily registrations from the table rows below.
             </p>
           </div>
-          <figure className="h-72 w-full text-left">
+          <figure className="h-56 w-full text-left sm:h-72">
             <AreaChart
               aspectRatio="auto"
               className="h-full"
@@ -252,8 +253,8 @@ export default function RegistrationsPage() {
         </div>
       </section>
 
-      <section className="min-w-0 rounded-2xl bg-zinc-100 p-1">
-        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-4">
+      <section className="admin-rise min-w-0 rounded-2xl bg-zinc-100 p-1">
+        <div className="min-w-0 overflow-hidden rounded-xl bg-white p-3 sm:p-4">
           <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight">All registrations</h2>
@@ -262,14 +263,14 @@ export default function RegistrationsPage() {
                 {data?.total ?? 0} matching registration{data?.total === 1 ? "" : "s"}
               </p>
             </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+            <div className="grid w-full grid-cols-2 items-end gap-2 sm:flex sm:w-auto sm:flex-wrap">
+              <label className="col-span-2 flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 Search
                 <input
                   value={search}
                   onChange={(event) => { setSearch(event.target.value); resetPage() }}
                   placeholder="Team or leader email"
-                  className="h-8 w-48 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 w-full rounded-md sm:w-48 border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
@@ -277,7 +278,7 @@ export default function RegistrationsPage() {
                 <select
                   value={status}
                   onChange={(event) => { setStatus(event.target.value); resetPage() }}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-auto"
                 >
                   {statusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
@@ -291,7 +292,7 @@ export default function RegistrationsPage() {
                         aria-labelledby="registration-date-label"
                         variant="outline"
                         size="sm"
-                        className="h-8 w-40 justify-start rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
+                        className="h-8 w-full justify-start sm:w-40 rounded-md border-zinc-200 bg-white normal-case font-normal tracking-tighter"
                       />
                     }
                   >
@@ -321,7 +322,7 @@ export default function RegistrationsPage() {
                     setCategory(event.target.value as RegistrationCategory | "all")
                     resetPage()
                   }}
-                  className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+                  className="h-8 w-full rounded-md border border-zinc-200 bg-white px-2 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 sm:w-auto"
                 >
                   <option value="all">All categories</option>
                   {registrationCategories.map((option) => (
@@ -382,6 +383,36 @@ export default function RegistrationsPage() {
             </div>
           </div>
 
+          <Bones name="registrations-table" loading={data === null && !loadError}>
+          <ul className="admin-stagger divide-y divide-zinc-100 md:hidden">
+            {visibleRegistrations.map((registration) => (
+              <li key={registration.registrationId}>
+                {/* A div, not a button: boneyard captures buttons as one solid block. */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setOpenRegistration(registration.registrationId)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpenRegistration(registration.registrationId) } }}
+                  aria-label={`Open ${registration.teamName}`}
+                  className="flex w-full cursor-pointer flex-col gap-1 rounded-lg px-1 py-3 text-left outline-none transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-zinc-400 active:bg-zinc-100"
+                >
+                  <span className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium">{registration.teamName}</span>
+                    <span className="shrink-0 tabular-nums text-sm">{rupees(registration.amountMinor)}</span>
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {registration.leader} · {registration.members} member{registration.members === 1 ? "" : "s"} · {formatDate(registration.registeredAt)}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{registration.college}</span>
+                  {registrationColumns.find((column) => column.key === "paymentStatus")?.render(registration)}
+                </div>
+              </li>
+            ))}
+            {!visibleRegistrations.length ? (
+              <li className="py-8 text-center text-sm text-muted-foreground">{loadError || "No registrations match these filters."}</li>
+            ) : null}
+          </ul>
+          <div className="hidden md:block">
           <Table className="min-w-max">
             <TableCaption className="sr-only">
               Registrations with date, team, leader, contact, college, team size, ACM status, category, and payment status.
@@ -399,15 +430,7 @@ export default function RegistrationsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data === null && !loadError ? (
-                Array.from({ length: 3 }, (_, index) => (
-                  <TableRow key={index} aria-hidden="true">
-                    <TableCell colSpan={visibleColumns.length}>
-                      <div className="h-5 w-full animate-pulse rounded bg-zinc-100" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : visibleRegistrations.length ? (
+              {visibleRegistrations.length ? (
                 visibleRegistrations.map((registration) => (
                   <TableRow
                     key={registration.registrationId}
@@ -436,6 +459,8 @@ export default function RegistrationsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          </Bones>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 pt-4">
             <p className="text-sm tracking-tighter text-muted-foreground">

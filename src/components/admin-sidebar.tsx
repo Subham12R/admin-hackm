@@ -36,6 +36,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import {
   DropdownMenu,
@@ -46,7 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import FallbackAvatar from "./fallback-avatar"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { can, useMe } from "@/lib/queries"
 
@@ -107,13 +108,17 @@ const navigation: NavigationGroup[] = [
 export function AdminSidebar() {
   const pathname = usePathname() ?? ""
   const [open, setOpen] = useState(false)
+  const { setOpenMobile } = useSidebar()
   const me = useMe()
   const user = { name: me.data?.user.display_name ?? "", email: me.data?.user.email ?? "" }
   const roles = me.data?.user.roles ?? []
   // Hide links the backend would refuse; until roles load, show nothing role-gated.
   const visibleNavigation = navigation
-    .map((group) => ({ ...group, items: group.items.filter((item) => !item.access || item.access(roles)) }))
+    .map((group) => ({ ...group, items: me.data ? group.items.filter((item) => !item.access || item.access(roles)) : [] }))
     .filter((group) => group.items.length)
+
+  // On phones the sidebar is a sheet over the page; close it once a link has navigated.
+  useEffect(() => setOpenMobile(false), [pathname, setOpenMobile])
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined)
@@ -136,6 +141,12 @@ export function AdminSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        {!me.data ? (
+          // Links are role-gated, so hold their place until the signed-in roles arrive.
+          <div className="flex flex-col gap-2 p-3" aria-hidden="true">
+            {Array.from({ length: 9 }, (_, index) => <span key={index} className="admin-shimmer h-7 rounded-md" style={{ width: `${70 + ((index * 17) % 30)}%` }} />)}
+          </div>
+        ) : null}
         {visibleNavigation.map((group) => (
           <SidebarGroup key={group.label || "dashboard"}>
             {group.label && <SidebarGroupLabel className="font-pixel-square text-md capitalize">{group.label}</SidebarGroupLabel>}

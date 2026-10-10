@@ -7,7 +7,8 @@ import { Bar } from "@/components/charts/bar"
 import { BarXAxis } from "@/components/charts/bar-x-axis"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
-import { Badge, Button, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, TextInput } from "@/components/admin/kit"
+import { Badge, Button, Empty, Field, Notice, PageHeader, Panel, Select, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { errorMessage } from "@/lib/api"
 import { notify } from "@/lib/notify"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
@@ -85,14 +86,16 @@ export default function CheckInPage() {
         description="Only teams accepted for the finals appear here. Accept teams from the Teams page."
       />
 
+      <Bones name="checkin-summary" loading={!summary}>
       {summary ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           <Tile title="Checked in" description={`${percent}% of ${summary.participants} participants`} value={`${summary.checked_in}/${summary.participants}`} />
           <Tile title="Teams complete" description="Every member has arrived" value={`${summary.teams_complete}/${summary.teams}`} />
           <Tile title="Teams partial" description="Some members still to arrive" value={summary.teams_partial.toLocaleString()} />
           <Tile title="Teams waiting" description="Nobody has arrived yet" value={summary.teams_waiting.toLocaleString()} />
         </div>
-      ) : <LoadingRows rows={2} />}
+      ) : null}
+      </Bones>
 
       <Panel title="Arrivals over time" description="Participants checked in per 15 minutes (IST), with the running total in the tooltip.">
         {chartData.length ? (
@@ -119,7 +122,7 @@ export default function CheckInPage() {
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Search">
-              <TextInput value={search} placeholder="Team, name, email or phone" className="w-64" onChange={(event) => setSearch(event.target.value)} />
+              <TextInput value={search} placeholder="Team, name, email or phone" className="w-full sm:w-64" onChange={(event) => setSearch(event.target.value)} />
             </Field>
             <Field label="Progress">
               <Select value={progress} onChange={(event) => setProgress(event.target.value as Progress)}>
@@ -132,16 +135,17 @@ export default function CheckInPage() {
           </div>
         }
       >
-        {!data ? <LoadingRows /> : !data.teams.length ? (
+        <Bones name="checkin-teams" loading={!data}>
+        {!data ? null : !data.teams.length ? (
           <Empty>No teams are accepted for the finals yet.</Empty>
         ) : !teams.length ? (
           <Empty>No teams match these filters.</Empty>
         ) : (
-          <ul className="grid gap-3 xl:grid-cols-2">
+          <ul className="admin-stagger grid gap-3 xl:grid-cols-2">
             {teams.map((item) => {
               const state = progressOf(item)
               return (
-                <li key={item.registration_id} className="rounded-xl border border-zinc-200 p-3">
+                <li key={item.registration_id} className="rounded-xl border border-zinc-200 p-3 transition-colors hover:border-zinc-300">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="flex flex-wrap items-center gap-1.5 font-medium">
@@ -171,7 +175,7 @@ export default function CheckInPage() {
                     ) : null}
                   </div>
                   <span className="mt-2 block h-1.5 rounded-full bg-zinc-100" aria-hidden="true">
-                    <span className="block h-1.5 rounded-full bg-emerald-600" style={{ width: `${item.member_count ? (item.checked_in / item.member_count) * 100 : 0}%` }} />
+                    <span className="block h-1.5 rounded-full bg-emerald-600 transition-[width] duration-500 ease-out" style={{ width: `${item.member_count ? (item.checked_in / item.member_count) * 100 : 0}%` }} />
                   </span>
                   <ul className="mt-2 divide-y divide-zinc-100">
                     {item.members.map((person) => (
@@ -211,6 +215,7 @@ export default function CheckInPage() {
             })}
           </ul>
         )}
+        </Bones>
       </Panel>
     </div>
   )
@@ -219,7 +224,7 @@ export default function CheckInPage() {
 function Tile({ title, description, value }: { title: string; description: string; value: string }) {
   return (
     <MetricsCard title={title} description={description}>
-      <p className="font-mono text-3xl font-semibold tracking-tight">{value}</p>
+      <p className="font-mono text-2xl font-semibold tracking-tight sm:text-3xl">{value}</p>
     </MetricsCard>
   )
 }

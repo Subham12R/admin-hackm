@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { adminQuery, evaluatorsSchema, submissionsSchema } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
@@ -246,7 +247,8 @@ function RoundBoard({ round, roles, run }: { round: Round; roles: string[]; run:
           ) : <p className="text-xs text-muted-foreground">Every final submission is already on the shortlist.</p>}
         </div>
       ) : null}
-      {board.isPending ? <LoadingRows /> : teams.length ? (
+      <Bones name="round-board" loading={board.isPending}>
+      {teams.length ? (
         <Table className="min-w-[900px]">
           <TableHeader>
             <TableRow>
@@ -291,6 +293,7 @@ function RoundBoard({ round, roles, run }: { round: Round; roles: string[]; run:
           </TableBody>
         </Table>
       ) : <Empty>{round.scope === "SHORTLIST" ? "No teams shortlisted yet." : "No final submissions yet."}</Empty>}
+      </Bones>
     </Panel>
   )
 }
@@ -318,7 +321,7 @@ function RoundResults({ round, roles, run }: { round: Round; roles: string[]; ru
       }
     >
       {results.isError ? <Notice tone="red">{errorMessage(results.error, "Results could not be loaded.")}</Notice> : null}
-      {results.isPending ? <LoadingRows /> : (
+      <Bones name="round-results" loading={results.isPending}>
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
             <h3 className="mb-2 font-medium tracking-tight">{snapshot ? "Frozen snapshot" : "Snapshot"}</h3>
@@ -356,7 +359,7 @@ function RoundResults({ round, roles, run }: { round: Round; roles: string[]; ru
             ) : <Empty>No eligible teams yet.</Empty>}
           </div>
         </div>
-      )}
+      </Bones>
     </Panel>
   )
 }

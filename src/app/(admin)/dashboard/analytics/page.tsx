@@ -4,7 +4,8 @@ import { Area, AreaChart } from "@/components/charts/area-chart"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
-import { Empty, LoadingRows, Notice, PageHeader, Panel, StatusBadge } from "@/components/admin/kit"
+import { Empty, Notice, PageHeader, Panel, StatusBadge } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { errorMessage, rupees } from "@/lib/api"
 import { keys, useAdminQuery } from "@/lib/queries"
 
@@ -26,18 +27,27 @@ export default function AnalyticsPage() {
   const analytics = useAdminQuery<Analytics>(keys.analytics, "/api/admin/analytics", { refetchInterval: 60_000 })
   const data = analytics.data
 
-  if (analytics.isError) return <Notice tone="red">{errorMessage(analytics.error, "Analytics could not be loaded.")}</Notice>
-  if (!data) return <LoadingRows rows={8} />
+  return (
+    <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
+      <PageHeader title="Analytics" description="Computed from live records; refreshed every minute." />
+      {analytics.isError ? <Notice tone="red">{errorMessage(analytics.error, "Analytics could not be loaded.")}</Notice> : (
+        <Bones name="analytics" loading={!data}>
+          {data ? <AnalyticsBody data={data} /> : null}
+        </Bones>
+      )}
+    </div>
+  )
+}
+
+function AnalyticsBody({ data }: { data: Analytics }) {
   const conversion = data.funnel.orders_created ? Math.round((data.funnel.orders_captured / data.funnel.orders_created) * 100) : 0
   const collegeMax = Math.max(1, ...data.top_colleges.map((item) => item.participants))
   const revenue = data.revenue_by_tier.reduce((sum, item) => sum + item.amount_minor, 0)
   const submissionTotal = data.submissions.submitted + data.submissions.draft + data.submissions.not_started
 
   return (
-    <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Analytics" description="Computed from live records; refreshed every minute." />
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <Tile title="Paid teams" description={`${data.teams.participants} participants`} value={data.teams.paid.toLocaleString()} />
         <Tile title="Checkout conversion" description={`${data.funnel.orders_captured} of ${data.funnel.orders_created} orders paid`} value={`${conversion}%`} />
         <Tile title="Collected" description={`${rupees(data.funnel.refunded_minor)} refunded`} value={rupees(revenue - data.funnel.refunded_minor)} />
@@ -73,12 +83,12 @@ export default function AnalyticsPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Top colleges" description="Participants in paid teams.">
           {data.top_colleges.length ? (
-            <ul className="space-y-2">
+            <ul className="admin-stagger space-y-2">
               {data.top_colleges.map((item) => (
-                <li key={item.college} className="grid grid-cols-[minmax(0,10rem)_1fr_2.5rem] items-center gap-2 text-sm">
+                <li key={item.college} className="grid grid-cols-[minmax(0,8rem)_1fr_2.5rem] sm:grid-cols-[minmax(0,10rem)_1fr_2.5rem] items-center gap-2 text-sm">
                   <span className="truncate" title={item.college}>{item.college}</span>
                   <span className="h-2 rounded-full bg-zinc-100" aria-hidden="true">
-                    <span className="block h-2 rounded-full bg-zinc-700" style={{ width: `${(item.participants / collegeMax) * 100}%` }} />
+                    <span className="block h-2 rounded-full bg-zinc-700 transition-[width] duration-700 ease-out" style={{ width: `${(item.participants / collegeMax) * 100}%` }} />
                   </span>
                   <span className="text-right tabular-nums">{item.participants}</span>
                 </li>
@@ -106,12 +116,12 @@ export default function AnalyticsPage() {
 
       <Panel title="Judging progress" description="Submitted scorecards against assignments, per round.">
         {data.rounds.length ? (
-          <ul className="space-y-3">
+          <ul className="admin-stagger space-y-3">
             {data.rounds.map((round) => (
-              <li key={round.name} className="grid grid-cols-[minmax(0,12rem)_1fr_5rem] items-center gap-3 text-sm">
+              <li key={round.name} className="grid grid-cols-[minmax(0,8rem)_1fr_4rem] sm:grid-cols-[minmax(0,12rem)_1fr_5rem] items-center gap-3 text-sm">
                 <span className="flex items-center gap-2 truncate">{round.name} <StatusBadge status={round.status} /></span>
                 <span className="h-2 rounded-full bg-zinc-100" aria-hidden="true">
-                  <span className="block h-2 rounded-full bg-zinc-700" style={{ width: `${round.assigned ? (round.submitted / round.assigned) * 100 : 0}%` }} />
+                  <span className="block h-2 rounded-full bg-zinc-700 transition-[width] duration-700 ease-out" style={{ width: `${round.assigned ? (round.submitted / round.assigned) * 100 : 0}%` }} />
                 </span>
                 <span className="text-right tabular-nums">{round.submitted}/{round.assigned}</span>
               </li>
@@ -126,7 +136,7 @@ export default function AnalyticsPage() {
 function Tile({ title, description, value }: { title: string; description: string; value: string }) {
   return (
     <MetricsCard title={title} description={description}>
-      <p className="font-mono text-3xl font-semibold tracking-tight">{value}</p>
+      <p className="font-mono text-2xl font-semibold tracking-tight sm:text-3xl">{value}</p>
     </MetricsCard>
   )
 }

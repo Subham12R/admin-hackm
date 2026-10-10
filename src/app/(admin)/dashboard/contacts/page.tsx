@@ -1,9 +1,10 @@
 "use client"
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Badge, Button, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
+import { Bones } from "@/components/admin/bones"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -46,22 +47,26 @@ export default function ContactsPage() {
           }
         >
           {list.isError ? <Notice tone="red">{errorMessage(list.error, "Messages could not be loaded.")}</Notice> : null}
-          {list.isPending ? <LoadingRows rows={5} /> : items.length ? (
-            <ul className="divide-y divide-zinc-100">
+          <Bones name="contacts-inbox" loading={list.isPending}>
+          {items.length ? (
+            <ul className="admin-stagger divide-y divide-zinc-100">
               {items.map((item) => (
                 <li key={item.id}>
-                  <button type="button" onClick={() => setSelected(item.id)}
-                    className={`w-full rounded-lg px-2 py-2 text-left hover:bg-zinc-50 ${selected === item.id ? "bg-zinc-100" : ""}`}>
+                  {/* A div, not a button: boneyard captures buttons as one solid block. */}
+                  <div role="button" tabIndex={0} aria-pressed={selected === item.id} onClick={() => setSelected(item.id)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(item.id) } }}
+                    className={`w-full cursor-pointer rounded-lg px-2 py-2 text-left outline-none transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-zinc-400 ${selected === item.id ? "bg-zinc-100" : ""}`}>
                     <p className="flex items-center justify-between gap-2 text-sm font-medium">
                       <span className="truncate">{item.subject}</span><StatusBadge status={item.status} />
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{item.name} · {item.email} · {dateTime(item.created_at)}</p>
                     <p className="truncate text-xs text-zinc-600">{item.preview}</p>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
           ) : <Empty>No messages here.</Empty>}
+          </Bones>
           {pages > 1 ? (
             <div className="mt-3 flex items-center justify-between text-sm">
               <Button disabled={page === 1} onClick={() => setPage(page - 1)}>Previous</Button>
@@ -82,6 +87,12 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
   const update = useAdminMutation<{ status?: string; assignee_email?: string }>((body) => ({ path: `/api/admin/contacts/${id}`, method: "PATCH", body }), AREA)
   const reply = useAdminMutation<{ kind: "REPLY" | "NOTE"; body: string }>((body) => ({ path: `/api/admin/contacts/${id}/replies`, body }), AREA)
   const [text, setText] = useState("")
+  const top = useRef<HTMLDivElement>(null)
+
+  // Below xl the thread stacks under the inbox, so bring the opened message into view.
+  useEffect(() => {
+    if (window.innerWidth < 1280) top.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [id])
 
   function run(promise: Promise<unknown>, success: string, after?: () => void) {
     void notify(promise, success, after)
@@ -89,8 +100,9 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
 
   const data = detail.data
   if (detail.isError) return <Panel><Notice tone="red">{errorMessage(detail.error, "Message could not be loaded.")}</Notice></Panel>
-  if (!data) return <Panel><LoadingRows rows={6} /></Panel>
+  if (!data) return <div ref={top} className="scroll-mt-16"><Panel><LoadingRows rows={6} /></Panel></div>
   return (
+    <div ref={top} className="scroll-mt-16">
     <Panel
       title={data.subject}
       description={`${data.name} <${data.email}> · ${dateTime(data.created_at)}${data.assigned_to ? ` · assigned to ${data.assigned_to}` : ""}`}
@@ -110,7 +122,7 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
       ) : null}
     >
       <p className="whitespace-pre-wrap rounded-lg bg-zinc-50 p-3 text-sm">{data.message}</p>
-      <ul className="mt-3 space-y-2">
+      <ul className="admin-stagger mt-3 space-y-2">
         {data.thread.map((entry) => (
           <li key={entry.id} className={`rounded-lg p-3 text-sm ${entry.kind === "NOTE" ? "bg-amber-50" : "bg-sky-50"}`}>
             <p className="mb-1 text-xs text-muted-foreground"><Badge tone={entry.kind === "NOTE" ? "amber" : "blue"}>{entry.kind === "NOTE" ? "internal note" : "emailed reply"}</Badge> {entry.author} · {dateTime(entry.created_at)}</p>
@@ -128,5 +140,6 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
         </div>
       ) : null}
     </Panel>
+    </div>
   )
 }

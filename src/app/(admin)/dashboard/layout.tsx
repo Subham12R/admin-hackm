@@ -14,7 +14,7 @@ export default async function AdminDashboardLayout({ children }: { children: Rea
 
   return (
     <Providers>
-      <SidebarProvider className="min-h-svh bg-background font-pixel-square rounded-xl ">
+      <SidebarProvider className="min-h-svh bg-background font-pixel-square">
         <GlassPointer />
         <AdminSidebar />
         <SidebarInset className="min-w-0 rounded-xl">

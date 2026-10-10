@@ -64,7 +64,6 @@ export function FlushPanel() {
               </li>
             ))}
           </ul>
-          <Notice tone="red">This cannot be undone. Razorpay keeps its own payment records; refunds after a flush must be handled in Razorpay.</Notice>
 
           <div className="flex flex-wrap items-end gap-3">
             <Button tone="amber" disabled={busy} onClick={() => void sendCode()}>{codeSent ? "Send a new code" : "1. Email me a code"}</Button>

@@ -24,7 +24,7 @@ type Gallery = { configured: boolean; max_bytes: number; content_types: string[]
 type SignedUpload =
   | { object_key: string; method: "POST"; url: string; fields: Record<string, string> }
   | { object_key: string; method: "PUT"; url: string; headers: Record<string, string> }
-type UploadState = { name: string; status: "waiting" | "uploading" | "done" | "failed"; error?: string }
+type UploadState = { name: string; size: number; status: "waiting" | "uploading" | "done" | "failed"; progress: number; error?: string }
 
 const AREA = [["gallery"]]
 
@@ -39,21 +39,42 @@ async function dimensions(file: File): Promise<{ width?: number; height?: number
   }
 }
 
-/** Send the file with the presigned POST (AWS S3) or PUT (Cloudflare R2 and other S3-compatible stores). */
-function sendToStorage(signed: SignedUpload, file: File) {
-  if (signed.method === "PUT") return fetch(signed.url, { method: "PUT", headers: signed.headers, body: file })
-  const form = new FormData()
-  for (const [name, value] of Object.entries(signed.fields)) form.append(name, value)
-  form.append("file", file)
-  return fetch(signed.url, { method: "POST", body: form })
+/**
+ * Send the file with the presigned POST (AWS S3) or PUT (Cloudflare R2 and other S3-compatible stores).
+ * XMLHttpRequest rather than fetch, because only XHR reports upload progress.
+ */
+function sendToStorage(signed: SignedUpload, file: File, onProgress: (fraction: number) => void) {
+  return new Promise<boolean>((resolve) => {
+    const request = new XMLHttpRequest()
+    request.open(signed.method, signed.url)
+    request.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(event.loaded / event.total) }
+    request.onload = () => resolve(request.status >= 200 && request.status < 300)
+    request.onerror = () => resolve(false)
+    if (signed.method === "PUT") {
+      for (const [name, value] of Object.entries(signed.headers)) request.setRequestHeader(name, value)
+      request.send(file)
+      return
+    }
+    const form = new FormData()
+    for (const [name, value] of Object.entries(signed.fields)) form.append(name, value)
+    form.append("file", file)
+    request.send(form)
+  })
 }
 
 /** Sign, upload straight to storage, then register the photo. Bytes never pass through the admin app. */
-async function uploadPhoto(file: File, caption: string) {
+async function uploadPhoto(file: File, caption: string, onProgress: (fraction: number) => void) {
   const signed = await api<SignedUpload>("/api/admin/gallery/uploads", { method: "POST", body: { content_type: file.type, size_bytes: file.size } })
-  const stored = await sendToStorage(signed, file).catch(() => null)
-  if (!stored?.ok) throw new Error("The photo could not reach storage. Check the bucket's CORS rule.")
+  if (!(await sendToStorage(signed, file, onProgress))) throw new Error("The photo could not reach storage. Check the bucket's CORS rule.")
   await api("/api/admin/gallery", { method: "POST", body: { object_key: signed.object_key, caption, ...(await dimensions(file)) } })
+}
+
+function ProgressBar({ value, tone = "green" }: { value: number; tone?: "green" | "red" }) {
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(value * 100)}>
+      <div className={`h-full rounded-full transition-[width] duration-200 ${tone === "red" ? "bg-red-500" : "bg-green-600"}`} style={{ width: `${Math.round(value * 100)}%` }} />
+    </div>
+  )
 }
 
 function megabytes(bytes: number) {
@@ -73,28 +94,35 @@ export default function GalleryPage() {
 
   const data = gallery.data
   const uploading = uploads.some((item) => item.status === "uploading" || item.status === "waiting")
+  const totalBytes = uploads.reduce((sum, item) => sum + item.size, 0)
+  const overall = totalBytes ? uploads.reduce((sum, item) => sum + item.size * (item.status === "done" ? 1 : item.progress), 0) / totalBytes : 0
+  const finished = uploads.filter((item) => item.status === "done").length
+  const failed = uploads.filter((item) => item.status === "failed").length
 
   async function upload(files: File[]) {
     if (!data) return
     const accepted = files.filter((file) => data.content_types.includes(file.type) && file.size <= data.max_bytes)
     const rejected = files.length - accepted.length
     if (rejected) toast.error(`${rejected} file${rejected === 1 ? "" : "s"} skipped: use JPEG, PNG, WebP or AVIF up to ${megabytes(data.max_bytes)}.`)
-    setUploads(accepted.map((file) => ({ name: file.name, status: "waiting" })))
+    setUploads(accepted.map((file) => ({ name: file.name, size: file.size, status: "waiting", progress: 0 })))
+    const patch = (index: number, change: Partial<UploadState>) =>
+      setUploads((current) => current.map((item, position) => position === index ? { ...item, ...change } : item))
     let done = 0
     for (const [index, file] of accepted.entries()) {
-      setUploads((current) => current.map((item, position) => position === index ? { ...item, status: "uploading" } : item))
+      patch(index, { status: "uploading" })
       try {
-        await uploadPhoto(file, caption.trim())
+        await uploadPhoto(file, caption.trim(), (progress) => patch(index, { progress }))
         done += 1
-        setUploads((current) => current.map((item, position) => position === index ? { ...item, status: "done" } : item))
+        patch(index, { status: "done", progress: 1 })
+        // Refresh after each photo so the grid below fills in while the rest of the batch uploads.
+        void gallery.refetch()
       } catch (error) {
         const message = error instanceof Error && !("status" in error) ? error.message : errorMessage(error, "Upload failed.")
-        setUploads((current) => current.map((item, position) => position === index ? { ...item, status: "failed", error: message } : item))
+        patch(index, { status: "failed", error: message })
       }
     }
     if (done) toast.success(`${done} photo${done === 1 ? "" : "s"} added to the gallery.`)
     if (input.current) input.current.value = ""
-    await gallery.refetch()
   }
 
   if (gallery.isError) return <Notice tone="red">{errorMessage(gallery.error, "The gallery could not be loaded.")}</Notice>
@@ -105,38 +133,61 @@ export default function GalleryPage() {
       <PageHeader title="Gallery" description="Photos shown on the public gallery page at /gallery. Hidden photos stay here but leave the site." />
 
       {data && !data.configured ? (
-        <Notice tone="amber">Photo storage is not configured on the server yet. Set S3_BUCKET, S3_REGION and AWS credentials in the backend environment to enable uploads.</Notice>
+        <Notice tone="amber">Photo storage is not configured on the server yet. Set R2_BUCKET, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY and R2_PUBLIC_URL in the backend environment to enable uploads.</Notice>
       ) : null}
 
       {editable && data?.configured ? (
-        <Panel title="Upload photos" description={`JPEG, PNG, WebP or AVIF, up to ${megabytes(data.max_bytes)} each. Files go straight to S3.`}>
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Caption for this batch (optional)">
-              <TextInput value={caption} maxLength={300} className="w-72" placeholder="Opening ceremony" onChange={(event) => setCaption(event.target.value)} />
-            </Field>
-            <input
-              ref={input}
-              type="file"
-              multiple
-              accept={data.content_types.join(",")}
-              className="hidden"
-              onChange={(event) => void upload(Array.from(event.target.files ?? []))}
-            />
-            <Button tone="green" disabled={uploading} onClick={() => input.current?.click()}>
-              {uploading ? "Uploading…" : "Choose photos"}
-            </Button>
+        <Panel title="Upload photos" description={`JPEG, PNG, WebP or AVIF, up to ${megabytes(data.max_bytes)} each. Files go straight to storage.`}>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-3">
+              <Field label="Caption for this batch (optional)">
+                <TextInput value={caption} maxLength={300} className="w-full" placeholder="Opening ceremony" onChange={(event) => setCaption(event.target.value)} />
+              </Field>
+              <input
+                ref={input}
+                type="file"
+                multiple
+                accept={data.content_types.join(",")}
+                className="hidden"
+                onChange={(event) => void upload(Array.from(event.target.files ?? []))}
+              />
+              <div>
+                <Button tone="green" disabled={uploading} onClick={() => input.current?.click()}>
+                  {uploading ? "Uploading…" : "Choose photos"}
+                </Button>
+              </div>
+              {uploads.length ? (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{finished} of {uploads.length} uploaded{failed ? `, ${failed} failed` : ""}</span>
+                    <span>{Math.round(overall * 100)}%</span>
+                  </div>
+                  <ProgressBar value={overall} />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="flex min-h-32 flex-col rounded-xl border border-zinc-200 p-3">
+              <p className="mb-2 text-sm font-medium">Upload queue</p>
+              {uploads.length ? (
+                <ul className="max-h-80 space-y-2 overflow-y-auto pr-1 text-sm">
+                  {uploads.map((item, index) => (
+                    <li key={`${item.name}-${index}`} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {item.status === "uploading" ? `${Math.round(item.progress * 100)}% · ` : ""}{megabytes(item.size)}
+                        </span>
+                        <Badge tone={item.status === "done" ? "green" : item.status === "failed" ? "red" : "amber"}>{item.status}</Badge>
+                      </div>
+                      <ProgressBar value={item.status === "done" ? 1 : item.progress} tone={item.status === "failed" ? "red" : "green"} />
+                      {item.error ? <span className="text-xs text-red-600">{item.error}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-muted-foreground">Chosen photos show up here with their progress.</p>}
+            </div>
           </div>
-          {uploads.length ? (
-            <ul className="mt-3 space-y-1 text-sm">
-              {uploads.map((item, index) => (
-                <li key={`${item.name}-${index}`} className="flex flex-wrap items-center gap-2">
-                  <span className="truncate">{item.name}</span>
-                  <Badge tone={item.status === "done" ? "green" : item.status === "failed" ? "red" : "amber"}>{item.status}</Badge>
-                  {item.error ? <span className="text-xs text-red-600">{item.error}</span> : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </Panel>
       ) : null}
 

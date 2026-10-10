@@ -9,6 +9,7 @@ import {
   Images,
   LogOut,
   LayoutDashboard,
+  Mail,
   Megaphone,
   MessageSquare,
   Moon,
@@ -90,6 +91,7 @@ const navigation: NavigationGroup[] = [
     items: [
       { title: "Contacts", href: "/dashboard/contacts", icon: MessageSquare, access: can.read },
       { title: "Announcements", href: "/dashboard/announcements", icon: Megaphone, access: can.read },
+      { title: "Email", href: "/dashboard/emails", icon: Mail, access: can.read },
       { title: "Gallery", href: "/dashboard/gallery", icon: Images, access: can.read },
     ],
   },

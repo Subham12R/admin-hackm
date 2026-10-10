@@ -31,6 +31,7 @@ export const keys = {
   contact: (id: string) => ["contact", id] as const,
   staff: ["staff"] as const,
   teamInvites: ["team-invites"] as const,
+  emailCampaigns: ["email-campaigns"] as const,
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,
@@ -64,7 +65,7 @@ export function useAdminMutation<TBody, TResult = unknown>(
   })
 }
 
-export type Me = { user: { id: string; email: string; display_name: string; roles: string[] } }
+export type Me = { user: { id: string; email: string; display_name: string; roles: string[]; is_owner?: boolean } }
 
 export function useMe() {
   return useAdminQuery<Me>(keys.me, "/api/auth/me")

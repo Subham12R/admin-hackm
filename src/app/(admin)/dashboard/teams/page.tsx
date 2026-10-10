@@ -14,6 +14,7 @@ import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
 import { Badge, StatusBadge } from "@/components/admin/kit"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
+import { FinalsDecisions } from "@/components/admin/finals-decisions"
 import { rupees } from "@/lib/api"
 import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -161,7 +162,7 @@ export default function TeamsPage() {
   )
   const decideFinals = useAdminMutation<{ registrationId: string; status: TeamFinals["status"] }>(
     ({ registrationId, status }) => ({ path: `/api/admin/teams/${registrationId}/finals`, body: { status } }),
-    [...REGISTRATION_AREAS, ["checkins"]]
+    [...REGISTRATION_AREAS, ["checkins"], ["finals"]]
   )
 
   const registrations = data?.teams ?? []
@@ -216,6 +217,8 @@ export default function TeamsPage() {
           Monitor team activity and review team details.
         </p>
       </div>
+
+      <FinalsDecisions canRelease={canReview} />
 
       <section className="rounded-2xl glass-shell p-1">
         <div className="rounded-xl bg-card p-4">
@@ -455,6 +458,11 @@ export default function TeamsPage() {
                                     {registration.adjustment.status === "REQUIRED" ? <Badge tone="amber">owes {rupees(registration.adjustment.amountMinor)}</Badge> : null}
                                     {registration.review.reviewedBy ? <Badge>reviewed by {registration.review.reviewedBy}</Badge> : null}
                                     {registration.finals.decidedBy ? <Badge>finals set by {registration.finals.decidedBy}</Badge> : null}
+                                    {registration.finals.status !== "PENDING" && registration.finals.notifiedStatus !== registration.finals.status ? <Badge tone="amber">decision not emailed yet</Badge> : null}
+                                    {registration.finals.status === "ACCEPTED" && registration.finals.notifiedStatus === "ACCEPTED" ? (
+                                      <StatusBadge status={registration.finals.rsvpStatus === "CONFIRMED" ? "VERIFIED" : registration.finals.rsvpStatus === "DECLINED" ? "DECLINED" : "PENDING"}
+                                        label={registration.finals.rsvpStatus === "CONFIRMED" ? "attending" : registration.finals.rsvpStatus === "DECLINED" ? "can't attend" : "RSVP pending"} />
+                                    ) : null}
                                   </p>
                                 </div>
                                 <button

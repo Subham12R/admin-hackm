@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react"
+import { useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type SelectHTMLAttributes } from "react"
 
 import { RichButton } from "@/components/rich-button"
 import { cn } from "@/lib/utils"
@@ -94,7 +94,7 @@ export function TextInput(props: ComponentProps<"input">) {
   return <input {...props} className={cn(control, "h-8", props.className)} />
 }
 
-export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea(props: ComponentProps<"textarea">) {
   return <textarea {...props} className={cn(control, "min-h-24 py-1.5", props.className)} />
 }
 

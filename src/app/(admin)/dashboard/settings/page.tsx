@@ -4,12 +4,13 @@ import { useState } from "react"
 
 import { Badge, Button, ConfirmButton, Field, FieldAction, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
+import { FlushPanel } from "@/components/admin/flush-panel"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
-type StaffMember = { id: string; email: string; display_name: string; status: string; roles: string[] }
+type StaffMember = { id: string; email: string; display_name: string; status: string; roles: string[]; owner?: boolean }
 type Invite = { id: string; email: string; role: string; expires_at: string; created_at: string }
 type StaffPage = { staff: StaffMember[]; invites: Invite[]; roles: string[] }
 
@@ -31,6 +32,7 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Your account, and staff access for super admins." />
       <PasswordPanel email={me.data?.user.email} roles={roles} />
       {can.superAdmin(roles) ? <StaffPanel selfId={me.data?.user.id} /> : null}
+      {me.data?.user.is_owner ? <FlushPanel /> : null}
     </div>
   )
 }
@@ -127,7 +129,10 @@ function StaffPanel({ selfId }: { selfId?: string }) {
               const isEditing = editing?.id === user.id
               return (
                 <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.display_name}<p className="text-xs text-muted-foreground">{user.email}</p></TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">{user.display_name}{user.owner ? <Badge tone="amber">owner</Badge> : null}</span>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                  </TableCell>
                   <TableCell className="whitespace-normal">
                     {isEditing ? (
                       <div className="flex flex-wrap gap-2">
@@ -145,7 +150,9 @@ function StaffPanel({ selfId }: { selfId?: string }) {
                   </TableCell>
                   <TableCell><StatusBadge status={user.status} /></TableCell>
                   <TableCell className="text-right">
-                    {isSelf ? <span className="text-xs text-muted-foreground">you</span> : isEditing ? (
+                    {isSelf ? <span className="text-xs text-muted-foreground">you</span> : user.owner ? (
+                      <span className="text-xs text-muted-foreground" title="Only the owner can change this account">protected</span>
+                    ) : isEditing ? (
                       <span className="flex justify-end gap-1">
                         <Button tone="green" disabled={!editing.roles.length || update.isPending} onClick={() => run(update.mutateAsync({ id: user.id, roles: editing.roles }), "Roles updated.", () => setEditing(null))}>Save</Button>
                         <Button onClick={() => setEditing(null)}>Cancel</Button>

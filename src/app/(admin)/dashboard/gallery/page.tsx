@@ -6,6 +6,7 @@ import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHe
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
 import { sendToStorage, type SignedUpload } from "@/lib/storage-upload"
+import { prepareGalleryPhoto, type PreparedPhoto } from "@/lib/webp"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 
 type Photo = {
@@ -22,26 +23,15 @@ type Photo = {
 }
 
 type Gallery = { configured: boolean; max_bytes: number; content_types: string[]; items: Photo[] }
-type UploadState = { name: string; size: number; status: "waiting" | "uploading" | "done" | "failed"; progress: number; error?: string }
+type UploadState = { name: string; size: number; status: "waiting" | "converting" | "uploading" | "done" | "failed"; progress: number; error?: string }
 
 const AREA = [["gallery"]]
 
-async function dimensions(file: File): Promise<{ width?: number; height?: number }> {
-  try {
-    const bitmap = await createImageBitmap(file)
-    const size = { width: bitmap.width, height: bitmap.height }
-    bitmap.close()
-    return size
-  } catch {
-    return {}
-  }
-}
-
 /** Sign, upload straight to storage, then register the photo. Bytes never pass through the admin app. */
-async function uploadPhoto(file: File, caption: string, onProgress: (fraction: number) => void) {
+async function uploadPhoto({ file, width, height }: PreparedPhoto, caption: string, onProgress: (fraction: number) => void) {
   const signed = await api<SignedUpload>("/api/admin/gallery/uploads", { method: "POST", body: { content_type: file.type, size_bytes: file.size } })
   if (!(await sendToStorage(signed, file, onProgress))) throw new Error("The photo could not reach storage. Check the bucket's CORS rule.")
-  await api("/api/admin/gallery", { method: "POST", body: { object_key: signed.object_key, caption, ...(await dimensions(file)) } })
+  await api("/api/admin/gallery", { method: "POST", body: { object_key: signed.object_key, caption, width, height } })
 }
 
 function ProgressBar({ value, tone = "green" }: { value: number; tone?: "green" | "red" }) {
@@ -68,7 +58,7 @@ export default function GalleryPage() {
   const remove = useAdminMutation<string>((id) => ({ path: `/api/admin/gallery/${id}`, method: "DELETE" }), AREA)
 
   const data = gallery.data
-  const uploading = uploads.some((item) => item.status === "uploading" || item.status === "waiting")
+  const uploading = uploads.some((item) => item.status === "uploading" || item.status === "converting" || item.status === "waiting")
   const totalBytes = uploads.reduce((sum, item) => sum + item.size, 0)
   const overall = totalBytes ? uploads.reduce((sum, item) => sum + item.size * (item.status === "done" ? 1 : item.progress), 0) / totalBytes : 0
   const finished = uploads.filter((item) => item.status === "done").length
@@ -76,17 +66,21 @@ export default function GalleryPage() {
 
   async function upload(files: File[]) {
     if (!data) return
-    const accepted = files.filter((file) => data.content_types.includes(file.type) && file.size <= data.max_bytes)
+    // The size limit is checked after conversion: a large camera original usually shrinks well under it.
+    const accepted = files.filter((file) => data.content_types.includes(file.type))
     const rejected = files.length - accepted.length
-    if (rejected) toast.error(`${rejected} file${rejected === 1 ? "" : "s"} skipped: use JPEG, PNG, WebP or AVIF up to ${megabytes(data.max_bytes)}.`)
+    if (rejected) toast.error(`${rejected} file${rejected === 1 ? "" : "s"} skipped: use JPEG, PNG, WebP or AVIF.`)
     setUploads(accepted.map((file) => ({ name: file.name, size: file.size, status: "waiting", progress: 0 })))
     const patch = (index: number, change: Partial<UploadState>) =>
       setUploads((current) => current.map((item, position) => position === index ? { ...item, ...change } : item))
     let done = 0
     for (const [index, file] of accepted.entries()) {
-      patch(index, { status: "uploading" })
       try {
-        await uploadPhoto(file, caption.trim(), (progress) => patch(index, { progress }))
+        patch(index, { status: "converting" })
+        const prepared = await prepareGalleryPhoto(file)
+        if (prepared.file.size > data.max_bytes) throw new Error(`Still ${megabytes(prepared.file.size)} after compression; the limit is ${megabytes(data.max_bytes)}.`)
+        patch(index, { status: "uploading", size: prepared.file.size })
+        await uploadPhoto(prepared, caption.trim(), (progress) => patch(index, { progress }))
         done += 1
         patch(index, { status: "done", progress: 1 })
         // Refresh after each photo so the grid below fills in while the rest of the batch uploads.
@@ -112,7 +106,7 @@ export default function GalleryPage() {
       ) : null}
 
       {editable && data?.configured ? (
-        <Panel title="Upload photos" description={`JPEG, PNG, WebP or AVIF, up to ${megabytes(data.max_bytes)} each. Files go straight to storage.`}>
+        <Panel title="Upload photos" description={`JPEG, PNG, WebP or AVIF. Photos are resized to 2400px and converted to WebP in your browser, then go straight to storage (up to ${megabytes(data.max_bytes)} each).`}>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="flex flex-col gap-3">
               <Field label="Caption for this batch (optional)">

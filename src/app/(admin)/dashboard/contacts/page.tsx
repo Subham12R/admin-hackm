@@ -3,7 +3,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
-import { Badge, Button, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
@@ -75,17 +75,18 @@ export default function ContactsPage() {
             </div>
           ) : null}
         </Panel>
-        {selected ? <Thread id={selected} canAct={can.support(roles)} canSeeStaff={can.superAdmin(roles)} /> : <Panel><Empty>Select a message to read it.</Empty></Panel>}
+        {selected ? <Thread id={selected} canAct={can.support(roles)} canSeeStaff={can.superAdmin(roles)} onDeleted={() => setSelected(null)} /> : <Panel><Empty>Select a message to read it.</Empty></Panel>}
       </div>
     </div>
   )
 }
 
-function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canSeeStaff: boolean }) {
+function Thread({ id, canAct, canSeeStaff, onDeleted }: { id: string; canAct: boolean; canSeeStaff: boolean; onDeleted: () => void }) {
   const detail = useAdminQuery<ContactDetail>(keys.contact(id), `/api/admin/contacts/${id}`)
   const staff = useAdminQuery<Staff>(keys.staff, canSeeStaff ? "/api/admin/staff" : null)
   const update = useAdminMutation<{ status?: string; assignee_email?: string }>((body) => ({ path: `/api/admin/contacts/${id}`, method: "PATCH", body }), AREA)
   const reply = useAdminMutation<{ kind: "REPLY" | "NOTE"; body: string }>((body) => ({ path: `/api/admin/contacts/${id}/replies`, body }), AREA)
+  const remove = useAdminMutation<void>(() => ({ path: `/api/admin/contacts/${id}`, method: "DELETE" }), [["contacts"]])
   const [text, setText] = useState("")
   const top = useRef<HTMLDivElement>(null)
 
@@ -118,6 +119,7 @@ function Thread({ id, canAct, canSeeStaff }: { id: string; canAct: boolean; canS
               {staff.data.staff.filter((user) => user.status === "ACTIVE").map((user) => <option key={user.email} value={user.email}>{user.display_name}</option>)}
             </Select>
           ) : null}
+          <ConfirmButton confirmLabel="Delete message" disabled={remove.isPending} onConfirm={() => run(remove.mutateAsync(undefined), "Message deleted.", onDeleted)}>Delete</ConfirmButton>
         </span>
       ) : null}
     >

@@ -59,8 +59,8 @@ function AnalyticsBody({ data }: { data: Analytics }) {
 
       <Panel title="Registrations per day" description="All registrations versus those that completed payment (IST days).">
         {data.daily.length ? (
-          <figure className="h-72 w-full text-left">
-            <AreaChart aspectRatio="auto" className="h-full" data={data.daily} margin={{ top: 16, right: 16, bottom: 36, left: 16 }}>
+          <figure className="flex h-72 w-full flex-col text-left">
+            <AreaChart aspectRatio="auto" className="min-h-0 flex-1" data={data.daily} margin={{ top: 16, right: 16, bottom: 36, left: 16 }}>
               <Grid horizontal />
               <Area dataKey="registrations" fill="var(--chart-line-secondary)" fillOpacity={0.25} />
               <Area dataKey="paid" fill="var(--chart-line-primary)" fillOpacity={0.35} />
@@ -72,7 +72,7 @@ function AnalyticsBody({ data }: { data: Analytics }) {
                 ]}
               />
             </AreaChart>
-            <figcaption className="mt-1 flex gap-4 text-xs text-muted-foreground">
+            <figcaption className="mt-2 flex shrink-0 gap-4 text-xs text-muted-foreground">
               <Legend color="var(--chart-line-secondary)" label="Registered" />
               <Legend color="var(--chart-line-primary)" label="Paid" />
             </figcaption>

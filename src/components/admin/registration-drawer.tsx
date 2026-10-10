@@ -14,6 +14,7 @@ export type RegistrationDetail = {
   team_name: string
   leader_email: string
   status: string
+  fee_waived?: boolean
   category: string | null
   pricing_tier: string
   quoted_amount_minor: number
@@ -67,13 +68,13 @@ export function RegistrationDrawer({ registrationId, onClose }: { registrationId
   return (
     <Sheet open={registrationId !== null} onOpenChange={(open) => { if (!open) onClose() }}>
       <SheetContent side="right" className="w-full overflow-y-auto font-pixel-square sm:max-w-2xl data-[side=right]:sm:max-w-2xl">
-        {registrationId ? <DrawerBody registrationId={registrationId} /> : null}
+        {registrationId ? <DrawerBody registrationId={registrationId} onDeleted={onClose} /> : null}
       </SheetContent>
     </Sheet>
   )
 }
 
-function DrawerBody({ registrationId }: { registrationId: string }) {
+function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onDeleted: () => void }) {
   const me = useMe()
   const roles = me.data?.user.roles ?? []
   const detail = useAdminQuery<RegistrationDetail>(keys.registration(registrationId), `/api/admin/registrations/${registrationId}`)
@@ -83,6 +84,7 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
     REGISTRATION_AREAS
   )
   const cancel = useAdminMutation<void>(() => ({ path: `/api/admin/registrations/${registrationId}/cancel` }), REGISTRATION_AREAS)
+  const remove = useAdminMutation<void>(() => ({ path: `/api/admin/registrations/${registrationId}`, method: "DELETE" }), REGISTRATION_AREAS)
   const accept = useAdminMutation<string>((attemptId) => ({ path: `/api/admin/payments/${attemptId}/accept` }), REGISTRATION_AREAS)
 
   function report(promise: Promise<unknown>, success: string) {
@@ -102,6 +104,7 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
         </SheetDescription>
         <div className="flex flex-wrap gap-1.5">
           <StatusBadge status={data.status} />
+          {data.fee_waived ? <Badge tone="green">fee waived</Badge> : null}
           {data.category ? <Badge>{data.category}</Badge> : null}
           {data.adjustment.status !== "NONE" ? <StatusBadge status={data.adjustment.status} label={`balance ${data.adjustment.status.toLowerCase()}`} /> : null}
         </div>
@@ -181,6 +184,12 @@ function DrawerBody({ registrationId }: { registrationId: string }) {
           <ConfirmButton confirmLabel="Cancel registration" disabled={cancel.isPending}
             onConfirm={() => report(cancel.mutateAsync(undefined), "Registration cancelled; its team name and emails are free again.")}>
             Cancel unpaid registration
+          </ConfirmButton>
+        ) : null}
+        {data.status === "ABANDONED" && can.review(roles) ? (
+          <ConfirmButton confirmLabel="Delete for good" disabled={remove.isPending}
+            onConfirm={() => report(remove.mutateAsync(undefined).then(onDeleted), "Abandoned registration deleted.")}>
+            Delete registration
           </ConfirmButton>
         ) : null}
       </section>

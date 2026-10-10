@@ -30,6 +30,7 @@ export const keys = {
   contacts: (params: string) => ["contacts", params] as const,
   contact: (id: string) => ["contact", id] as const,
   staff: ["staff"] as const,
+  teamInvites: ["team-invites"] as const,
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,

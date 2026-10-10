@@ -137,6 +137,9 @@ function NewRound({ onCreated, run }: { onCreated: (id: string) => void; run: Ru
 function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; run: Run }) {
   const editable = can.assign(roles)
   const update = useAdminMutation<Partial<Round>>((body) => ({ path: `/api/admin/rounds/${round.id}`, method: "PATCH", body }), JUDGING_AREAS)
+  const remove = useAdminMutation<void>(() => ({ path: `/api/admin/rounds/${round.id}`, method: "DELETE" }), JUDGING_AREAS)
+  // The backend keeps rounds that already hold submitted scores or released results.
+  const deletable = round.submitted_scorecards === 0 && round.results_status !== "RELEASED"
   const [minEvaluations, setMinEvaluations] = useState(round.min_evaluations)
 
   return (
@@ -150,6 +153,7 @@ function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; r
             <>
               {round.status !== "OPEN" ? <ConfirmButton tone="green" confirmLabel="Open for scoring" disabled={update.isPending} onConfirm={() => run(update.mutateAsync({ status: "OPEN" }), "Round opened; judges can score now.")}>Open round</ConfirmButton> : null}
               {round.status === "OPEN" ? <ConfirmButton confirmLabel="Close scoring" disabled={update.isPending} onConfirm={() => run(update.mutateAsync({ status: "CLOSED" }), "Round closed; scores are frozen.")}>Close round</ConfirmButton> : null}
+              {deletable ? <ConfirmButton confirmLabel="Delete round" disabled={remove.isPending} onConfirm={() => run(remove.mutateAsync(undefined), "Round deleted.")}>Delete</ConfirmButton> : null}
             </>
           ) : null}
         </span>

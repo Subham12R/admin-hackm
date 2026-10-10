@@ -156,16 +156,27 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             <div>
               <p className="font-medium">Problem statements</p>
               <p className="text-xs text-muted-foreground">
-                {stage.statements.released ? "Teams can read these now." : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}.` : "Hidden from teams until you set a reveal time."}
-                {stage.tracks.length > 1 ? " Teams pick one when they submit." : ""}
+                {stage.statements.released ? "Teams can read these now." : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}.` : "Hidden from teams until you set a reveal time or reveal them now."}
+                {stage.tracks.length > 1 ? " Each team locks one before it can start its project; only organisers can change it after that." : ""}
               </p>
             </div>
             {editable ? (
+              <span className="flex flex-wrap gap-1">
+              {!stage.statements.released && stage.tracks.length ? (
+                <ConfirmButton tone="green" confirmLabel="Show them to teams now" disabled={save.isPending}
+                  onConfirm={() => void notify(save.mutateAsync({ statements_release_at: new Date().toISOString() }), "Problem statements revealed.")}>
+                  Reveal now
+                </ConfirmButton>
+              ) : null}
               <Button disabled={addTrack.isPending} onClick={() => void notify(addTrack.mutateAsync({ title: `Problem statement ${stage.tracks.length + 1}` }), "Problem statement added. Edit it below.")}>
                 Add problem statement
               </Button>
+              </span>
             ) : null}
           </div>
+          {stage.published && stage.tracks.length > 1 && !stage.statements.release_at ? (
+            <Notice tone="amber">This event is visible but its problem statements have no reveal time, so teams cannot pick one or start their project. Set a reveal time above or press Reveal now.</Notice>
+          ) : null}
           {stage.tracks.length ? stage.tracks.map((track) => <TrackEditor key={`${track.id}-${track.version}`} track={track} editable={editable} />) : <Empty>No problem statements yet.</Empty>}
         </div>
       </div>

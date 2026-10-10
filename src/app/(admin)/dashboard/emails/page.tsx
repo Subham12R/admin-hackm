@@ -10,6 +10,7 @@ import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries
 import { sendToStorage, type SignedUpload } from "@/lib/storage-upload"
 
 type Audience = "LEADERS" | "MEMBERS" | "FINALIST_LEADERS" | "FINALIST_MEMBERS"
+type SenderKey = "announcements" | "support" | "noreply"
 type Draft = {
   subject: string
   body_markdown: string
@@ -18,8 +19,10 @@ type Draft = {
   banner_url: string
   cta_label: string
   cta_url: string
+  sender: SenderKey
 }
 type Campaign = Draft & {
+  from?: string
   id: string
   status: "DRAFT" | "SENT"
   recipient_count: number
@@ -28,7 +31,13 @@ type Campaign = Draft & {
   created_at: string
   created_by: string | null
 }
-type Campaigns = { items: Campaign[]; audiences: Record<Audience, number>; uploads: boolean; placeholders: string[] }
+type Campaigns = {
+  items: Campaign[]
+  audiences: Record<Audience, number>
+  uploads: boolean
+  placeholders: string[]
+  senders?: { key: SenderKey; address: string; from: string }[]
+}
 
 const AREA = [keys.emailCampaigns]
 const AUDIENCES: Record<Audience, string> = {
@@ -45,6 +54,7 @@ const EMPTY: Draft = {
   banner_url: "",
   cta_label: "",
   cta_url: "",
+  sender: "announcements",
 }
 type Tool =
   | { label: string; icon: typeof Bold; wrap: [string, string, string] }
@@ -60,12 +70,17 @@ const TOOLS: Tool[] = [
   { label: "Divider", icon: Minus, wrap: ["\n---\n", "", ""] },
   { label: "Table", icon: Table2, wrap: ["\n| Item | Detail |\n|---|---|\n| Check-in | 9:00 AM |\n", "", ""] },
 ]
+const SENDER_HELP: Record<SenderKey, string> = {
+  announcements: "Updates and news (replies go to support)",
+  support: "Personal follow-ups (replies come straight back)",
+  noreply: "Account and system notices (replies go to support)",
+}
 const IMAGE_TYPES = ["image/gif", "image/jpeg", "image/png"]
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 function draftOf(campaign: Campaign): Draft {
   const { subject, body_markdown, audience, show_banner, banner_url, cta_label, cta_url } = campaign
-  return { subject, body_markdown, audience, show_banner, banner_url, cta_label, cta_url }
+  return { subject, body_markdown, audience, show_banner, banner_url, cta_label, cta_url, sender: campaign.sender ?? "announcements" }
 }
 
 /** Upload an email image (GIF/JPEG/PNG) straight to storage and return its public URL. */
@@ -110,6 +125,7 @@ export default function EmailsPage() {
                     <span className="truncate">{item.subject}</span>
                     <StatusBadge status={item.status} />
                     <Badge>{AUDIENCES[item.audience]}</Badge>
+                    {item.from ? <Badge>from {item.from}</Badge> : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {item.sent_at
@@ -227,6 +243,13 @@ function Composer({ id, initial, campaigns, onSaved, onClose }: {
         <div className="grid gap-3">
           <Field label="Subject">
             <TextInput value={draft.subject} maxLength={200} onChange={(event) => set("subject", event.target.value)} placeholder="Hack Day: what to bring" />
+          </Field>
+          <Field label="Send from" hint={SENDER_HELP[draft.sender]}>
+            <Select value={draft.sender} onChange={(event) => set("sender", event.target.value as SenderKey)}>
+              {(campaigns.senders ?? (Object.keys(SENDER_HELP) as SenderKey[]).map((key) => ({ key, address: `${key}@hackmatrix.codes`, from: key }))).map((sender) => (
+                <option key={sender.key} value={sender.key}>{sender.from}</option>
+              ))}
+            </Select>
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Send to">

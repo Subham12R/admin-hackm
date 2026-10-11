@@ -35,6 +35,10 @@ export const keys = {
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,
+  certificateTypes: (stage: string) => ["certificate-types", stage] as const,
+  badges: ["badges"] as const,
+  candidates: (body: string) => ["candidates", body] as const,
+  credentials: (params: string) => ["credentials", params] as const,
   judgeAssignment: (id: string) => ["judge-assignment", id] as const,
 }
 

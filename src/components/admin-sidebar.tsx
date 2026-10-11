@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Gavel,
   Images,
+  Award,
   LogOut,
   LayoutDashboard,
   Mail,
@@ -84,6 +85,7 @@ const navigation: NavigationGroup[] = [
       { title: "Evaluations", href: "/dashboard/evaluations", icon: Gavel, access: can.read },
       { title: "Rounds & Results", href: "/dashboard/leaderboard", icon: Trophy, access: can.read },
       { title: "Events", href: "/dashboard/events", icon: CalendarRange, access: can.read },
+      { title: "Certificates", href: "/dashboard/certificates", icon: Award, access: can.read },
     ],
   },
   {

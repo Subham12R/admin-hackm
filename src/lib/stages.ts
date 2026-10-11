@@ -22,6 +22,7 @@ export type Stage = {
   statements: { release_at: string | null; released: boolean }
   tracks: Track[]
   updated_at: string | null
+  completed_at: string | null
   teams: number
   drafts: number
   submitted: number

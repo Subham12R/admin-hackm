@@ -109,7 +109,9 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
         <span className="flex flex-wrap items-center gap-2">
           <Badge tone={stage.published ? "green" : "zinc"}>{stage.published ? "visible to teams" : "hidden"}</Badge>
           <StatusBadge status={submissionWindow.state} label={submissionWindow.state === "OPEN" ? "submissions open" : submissionWindow.state === "CLOSED" ? "submissions closed" : "not open yet"} />
+          {stage.completed_at ? <Badge tone="green">completed</Badge> : null}
           <Link href={`/dashboard/submissions?event=${stage.id}`} className="text-sm underline">Submissions</Link>
+          <Link href={`/dashboard/certificates?event=${stage.id}`} className="text-sm underline">Certificates</Link>
           {editable ? (
             <Button tone={stage.published ? "zinc" : "green"} disabled={save.isPending}
               onClick={() => void notify(save.mutateAsync({ published: !stage.published }), stage.published ? "Event hidden from teams." : "Event published; eligible teams see it on their dashboard.")}>

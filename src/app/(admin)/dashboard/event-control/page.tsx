@@ -17,13 +17,17 @@ const MODES: { mode: RegistrationMode; label: string; help: string }[] = [
   { mode: "SCHEDULED", label: "Follow the dates", help: "Opens and closes on the dates below; an empty date means no limit." },
   { mode: "CLOSED", label: "Closed", help: "New teams are refused. Invite links still work." },
 ]
+const FEES: { paid: boolean; label: string; help: string }[] = [
+  { paid: true, label: "Paid", help: "Teams pay the entry fee with Razorpay before they are registered." },
+  { paid: false, label: "Free", help: "Teams are registered on submit and get the confirmation email at once. No payment step." },
+]
 export type EventConfig = {
   name: string
   timezone: string
   now: string
   starts_at: string | null
   ends_at: string | null
-  registration: Window & { enabled?: boolean; mode?: RegistrationMode; team_edits_close_at?: string | null }
+  registration: Window & { enabled?: boolean; mode?: RegistrationMode; team_edits_close_at?: string | null; payment_required?: boolean }
   submission: Window
   challenge: { release_at: string | null; released: boolean }
   stage?: { id: string; name: string } | null
@@ -67,6 +71,8 @@ export default function EventControlPage() {
 function ScheduleEditor({ config, editable, saved }: { config: EventConfig; editable: boolean; saved: () => void }) {
   const save = useAdminMutation<Partial<Record<FieldKey | "name", string | null>>>((body) => ({ path: "/api/admin/event", method: "PATCH", body }), [["event"], ["stages"]])
   const setMode = useAdminMutation<RegistrationMode>((mode) => ({ path: "/api/admin/event", method: "PATCH", body: { registration_mode: mode } }), [["event"]])
+  const setPaid = useAdminMutation<boolean>((paid) => ({ path: "/api/admin/event", method: "PATCH", body: { payment_required: paid } }), [["event"]])
+  const paid = config.registration.payment_required !== false
   const mode: RegistrationMode = config.registration.mode ?? (config.registration.enabled === false ? "CLOSED" : "SCHEDULED")
   const [initial] = useState(() => fromConfig(config))
   const [form, setForm] = useState(initial)
@@ -88,12 +94,23 @@ function ScheduleEditor({ config, editable, saved }: { config: EventConfig; edit
           <div className="flex flex-col gap-3">
             <span className="flex flex-wrap items-center gap-1.5">
               <StatusBadge status={config.registration.state} label={config.registration.state === "OPEN" ? "taking new teams" : config.registration.state === "NOT_OPEN" ? "not open yet" : "closed"} />
+              <StatusBadge status={paid ? "PAID" : "FREE"} label={paid ? "paid entry" : "free entry"} />
             </span>
             <div role="radiogroup" aria-label="Registration mode" className="grid gap-2 sm:grid-cols-3">
               {MODES.map((option) => (
                 <button key={option.mode} type="button" role="radio" aria-checked={mode === option.mode} disabled={!editable || setMode.isPending}
                   onClick={() => { if (option.mode !== mode) void notify(setMode.mutateAsync(option.mode), `Registration: ${option.label.toLowerCase()}.`) }}
                   className={`rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed ${mode === option.mode ? "border-foreground bg-foreground/5" : "border-border hover:bg-muted/50"}`}>
+                  <span className="block text-sm font-medium">{option.label}</span>
+                  <span className="block text-xs text-muted-foreground">{option.help}</span>
+                </button>
+              ))}
+            </div>
+            <div role="radiogroup" aria-label="Entry fee" className="grid gap-2 sm:grid-cols-2">
+              {FEES.map((option) => (
+                <button key={option.label} type="button" role="radio" aria-checked={paid === option.paid} disabled={!editable || setPaid.isPending}
+                  onClick={() => { if (option.paid !== paid) void notify(setPaid.mutateAsync(option.paid), `Registration is now ${option.label.toLowerCase()}.`) }}
+                  className={`rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed ${paid === option.paid ? "border-foreground bg-foreground/5" : "border-border hover:bg-muted/50"}`}>
                   <span className="block text-sm font-medium">{option.label}</span>
                   <span className="block text-xs text-muted-foreground">{option.help}</span>
                 </button>

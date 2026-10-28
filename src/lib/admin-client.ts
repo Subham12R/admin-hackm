@@ -37,6 +37,7 @@ const registrationRowSchema = z.object({
   acm_members: z.number().int().nonnegative(),
   category: categorySchema,
   registration_status: z.string(),
+  fee_waived: z.boolean().default(false),
   payment_status: z.string(),
   payment_needs_review: z.boolean().default(false),
   adjustment_status: z.string().default("NONE"),
@@ -101,6 +102,7 @@ export const teamsPageSchema = z.object({
       email: z.string(),
       phone: z.string(),
       college: z.string(),
+      fee_waived: z.boolean().default(false),
       members: z.array(
         z.object({
           id: z.string(),
@@ -242,6 +244,8 @@ export type Registration = {
   acmPending: number
   category: RegistrationCategory
   registrationStatus: string
+  /** Registered without paying: free entry or a free invite. */
+  feeWaived: boolean
   paymentStatus: "Success" | "Pending" | "Failed"
   paymentNeedsReview: boolean
   adjustmentStatus: string
@@ -395,6 +399,7 @@ export function toTeamsPage(data: z.infer<typeof teamsPageSchema>) {
       phone: team.phone,
       college: team.college,
       status: team.status,
+      feeWaived: team.fee_waived,
       members: team.members.map((member) => ({
         id: member.id,
         name: member.name,
@@ -497,6 +502,7 @@ function toRegistration(row: RegistrationRow): Registration {
     acmPending: row.acm_pending,
     category: row.category,
     registrationStatus: row.registration_status,
+    feeWaived: row.fee_waived,
     paymentStatus: paymentStatus(row.payment_status),
     paymentNeedsReview: row.payment_needs_review,
     adjustmentStatus: row.adjustment_status,

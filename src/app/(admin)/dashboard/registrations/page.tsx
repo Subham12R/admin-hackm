@@ -11,7 +11,7 @@ import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
 import { RichButton } from "@/components/rich-button"
-import { Badge, StatusBadge } from "@/components/admin/kit"
+import { Badge, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
@@ -109,7 +109,7 @@ const registrationColumns: readonly RegistrationColumn[] = [
     label: "Payment status",
     render: (registration: Registration) => (
       <span className="inline-flex flex-wrap items-center gap-1">
-        <StatusBadge status={registration.registrationStatus} />
+        <RegistrationBadge status={registration.registrationStatus} feeWaived={registration.feeWaived} />
         {registration.paymentNeedsReview ? <Badge tone="amber">payment review</Badge> : null}
         {registration.adjustmentStatus === "REQUIRED" ? <Badge tone="amber">balance due</Badge> : null}
         {registration.acmPending ? <Badge tone="blue">{registration.acmPending} ACM to check</Badge> : null}

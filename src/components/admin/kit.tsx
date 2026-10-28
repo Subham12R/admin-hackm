@@ -68,6 +68,11 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
   return <Badge tone={statusTone(status)}>{label ?? status.replaceAll("_", " ").toLowerCase()}</Badge>
 }
 
+/** A registration's status, saying "free" for teams registered without paying (free entry or a free invite). */
+export function RegistrationBadge({ status, feeWaived }: { status: string; feeWaived?: boolean }) {
+  return status === "PAID" && feeWaived ? <StatusBadge status="PAID" label="free" /> : <StatusBadge status={status} />
+}
+
 const control = "rounded-md border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:bg-muted/50 disabled:text-muted-foreground"
 
 export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: ReactNode }) {

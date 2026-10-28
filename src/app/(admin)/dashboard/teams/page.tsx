@@ -12,7 +12,7 @@ import { BarXAxis } from "@/components/charts/bar-x-axis"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
-import { Badge, StatusBadge } from "@/components/admin/kit"
+import { Badge, RegistrationBadge, StatusBadge } from "@/components/admin/kit"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { FinalsDecisions } from "@/components/admin/finals-decisions"
 import { rupees } from "@/lib/api"
@@ -454,7 +454,7 @@ export default function TeamsPage() {
                                     {registration.teamName} · {registration.memberCount} participants
                                   </p>
                                   <p className="mt-1 flex flex-wrap gap-1">
-                                    <StatusBadge status={registration.status} />
+                                    <RegistrationBadge status={registration.status} feeWaived={registration.feeWaived} />
                                     {registration.adjustment.status === "REQUIRED" ? <Badge tone="amber">owes {rupees(registration.adjustment.amountMinor)}</Badge> : null}
                                     {registration.review.reviewedBy ? <Badge>reviewed by {registration.review.reviewedBy}</Badge> : null}
                                     {registration.finals.decidedBy ? <Badge>finals set by {registration.finals.decidedBy}</Badge> : null}

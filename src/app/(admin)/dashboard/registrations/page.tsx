@@ -133,7 +133,7 @@ const statusFilters = [
   { value: "", label: "Active (pending + paid)" },
   { value: "PAID", label: "Paid" },
   { value: "PAYMENT_PENDING", label: "Awaiting payment" },
-  { value: "REFUNDED", label: "Refunded" },
+  { value: "REFUNDED", label: "Refunded (cancelled)" },
   { value: "ABANDONED", label: "Abandoned" },
   { value: "ALL", label: "Everything" },
 ]
@@ -286,6 +286,7 @@ export default function RegistrationsPage() {
                 >
                   {statusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
+                {status === "REFUNDED" ? <span>Refunded teams are cancelled and hidden from every other list.</span> : null}
               </label>
               <div className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 <span id="registration-date-label">Registration date</span>

@@ -261,12 +261,15 @@ function RefundForm({ attemptId, refundable, onDone }: { attemptId: string; refu
               .then(() => setOpen(false))
               // A failed attempt is recorded under its key; a deliberate retry needs a fresh one.
               .catch((error) => { setIdempotencyKey(crypto.randomUUID()); throw error }),
-            "Refund sent to Razorpay."
+            "Refund initiated. The leader was emailed (5–7 working days)."
           )}>
           Refund
         </ConfirmButton>
         <Button onClick={() => setOpen(false)}>Close</Button>
       </span>
+      <p className="text-xs text-muted-foreground sm:col-span-3">
+        Refunding the whole entry payment cancels the registration: the team leaves every list (find it under the Refunded filter) and the leader&apos;s dashboard asks them to register again. Either way the leader is emailed that the money arrives in 5–7 working days.
+      </p>
     </div>
   )
 }

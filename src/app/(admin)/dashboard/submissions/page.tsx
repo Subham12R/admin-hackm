@@ -195,7 +195,16 @@ function Submissions() {
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs">{dateTime(row.endTime)}<p className="text-muted-foreground">updated {dateTime(row.updatedAt)}</p></TableCell>
+                  <TableCell className="text-xs">
+                    {dateTime(row.endTime)}<p className="text-muted-foreground">updated {dateTime(row.updatedAt)}</p>
+                    {row.timer ? (
+                      <p className={row.timer.state === "EXPIRED" ? "text-red-600" : row.timer.state === "RUNNING" ? "text-emerald-700" : "text-muted-foreground"}>
+                        {row.timer.state === "NOT_STARTED" ? "Clock not started"
+                          : row.timer.state === "RUNNING" ? `Started ${dateTime(row.timer.started_at)} · ends ${dateTime(row.timer.deadline)}`
+                          : row.timer.started_at ? `Time up ${dateTime(row.timer.deadline)}` : "Never started"}
+                      </p>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button onClick={() => setExpanded((current) => current === row.registrationId ? null : row.registrationId)} aria-expanded={expanded === row.registrationId}>
                       {expanded === row.registrationId ? "Hide" : "Details"}

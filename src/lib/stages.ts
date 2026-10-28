@@ -20,6 +20,9 @@ export type Stage = {
   published: boolean
   submission_window: { opens_at: string | null; closes_at: string | null; state: "OPEN" | "NOT_OPEN" | "CLOSED" }
   statements: { release_at: string | null; released: boolean }
+  // Per-team time limit: each team gets this long from when it starts, never past submissions closing.
+  time_limit_minutes?: number | null
+  started?: number
   tracks: Track[]
   updated_at: string | null
   completed_at: string | null

@@ -78,7 +78,10 @@ function scheduleOf(stage: Stage): Record<ScheduleKey, string> {
 
 /** Remounted (by key) after every save, so the form always starts from the server copy. */
 function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean; only: boolean }) {
-  const [initial] = useState(() => ({ name: stage.name, description: stage.description, eligibility: stage.eligibility, schedule: scheduleOf(stage) }))
+  const [initial] = useState(() => ({
+    name: stage.name, description: stage.description, eligibility: stage.eligibility, schedule: scheduleOf(stage),
+    hours: stage.time_limit_minutes ? String(stage.time_limit_minutes / 60) : "",
+  }))
   const [form, setForm] = useState(initial)
   const save = useAdminMutation<Record<string, unknown>>((body) => ({ path: `/api/admin/stages/${stage.id}`, method: "PATCH", body }), AREAS)
   const remove = useAdminMutation<string>((confirm) => ({ path: `/api/admin/stages/${stage.id}?confirm=${encodeURIComponent(confirm)}`, method: "DELETE" }), AREAS)
@@ -89,7 +92,11 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   const addTrack = useAdminMutation<{ title: string }>((body) => ({ path: `/api/admin/stages/${stage.id}/tracks`, body }), AREAS)
 
   const changedTimes = SCHEDULE.filter(([key]) => form.schedule[key] !== initial.schedule[key])
+  const hoursNumber = Number(form.hours)
+  const hoursError = form.hours.trim() && (!Number.isFinite(hoursNumber) || hoursNumber < 1 || hoursNumber > 336 || !Number.isInteger(hoursNumber * 4))
+    ? "Between 1 and 336 hours, in quarter hours" : ""
   const dirty = form.name !== initial.name || form.description !== initial.description || form.eligibility !== initial.eligibility || changedTimes.length > 0
+    || form.hours.trim() !== initial.hours
 
   function submit() {
     const body: Record<string, unknown> = {}
@@ -97,6 +104,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
     if (form.description !== initial.description) body.description = form.description
     if (form.eligibility !== initial.eligibility) body.eligibility = form.eligibility
     for (const [key] of changedTimes) body[key] = fromLocalInput(form.schedule[key])
+    if (form.hours.trim() !== initial.hours) body.time_limit_minutes = form.hours.trim() ? Math.round(hoursNumber * 60) : null
     void notify(save.mutateAsync(body), "Event saved. The server enforces the new times now.")
   }
 
@@ -104,7 +112,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   return (
     <Panel
       title={stage.name}
-      description={`${ELIGIBILITY[stage.eligibility]} · ${stage.teams} teams · ${stage.submitted} submitted · ${stage.drafts} drafts${stage.awards ? ` · ${stage.awards} placings` : ""}`}
+      description={`${ELIGIBILITY[stage.eligibility]} · ${stage.teams} teams${stage.time_limit_minutes ? ` · ${stage.time_limit_minutes / 60}h per team · ${stage.started ?? 0} started` : ""} · ${stage.submitted} submitted · ${stage.drafts} drafts${stage.awards ? ` · ${stage.awards} placings` : ""}`}
       actions={
         <span className="flex flex-wrap items-center gap-2">
           <Badge tone={stage.published ? "green" : "zinc"}>{stage.published ? "visible to teams" : "hidden"}</Badge>
@@ -145,9 +153,14 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
               </span>
             </Field>
           ))}
+          <Field label="Time limit per team (hours)" error={hoursError || undefined}
+            hint={hoursError ? undefined : form.hours.trim() !== initial.hours ? "Unsaved change" : "Empty = no limit. Each team starts its own clock once the statements are out; a team starting late only gets the time left before submissions close."}>
+            <TextInput type="number" inputMode="decimal" min={1} max={336} step={0.25} value={form.hours} disabled={!editable} placeholder="48"
+              onChange={(event) => setForm({ ...form, hours: event.target.value })} />
+          </Field>
           {editable ? (
             <div className="flex flex-wrap items-end gap-2 md:col-span-2">
-              <Button tone="green" type="submit" disabled={!dirty || !form.name.trim() || save.isPending}>{save.isPending ? "Saving…" : "Save event"}</Button>
+              <Button tone="green" type="submit" disabled={!dirty || !form.name.trim() || Boolean(hoursError) || save.isPending}>{save.isPending ? "Saving…" : "Save event"}</Button>
               {dirty ? <Button onClick={() => setForm(initial)}>Discard changes</Button> : null}
               {!only && !hasWork ? (
                 <ConfirmButton confirmLabel="Delete event" disabled={remove.isPending}
@@ -179,7 +192,9 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             <div>
               <p className="font-medium">Problem statements</p>
               <p className="text-xs text-muted-foreground">
-                {stage.statements.released ? "Teams can read these now." : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}.` : "Hidden from teams until you set a reveal time or reveal them now."}
+                {stage.statements.released
+                  ? stage.time_limit_minutes ? "Out now: each team sees them when it starts its own clock." : "Teams can read these now."
+                  : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}${stage.time_limit_minutes ? "; from then each team can start its clock" : ""}.` : "Hidden from teams until you set a reveal time or reveal them now."}
                 {stage.tracks.length > 1 ? " Each team locks one before it can start its project; only organisers can change it after that." : ""}
               </p>
             </div>

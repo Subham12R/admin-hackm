@@ -165,6 +165,10 @@ export const submissionsSchema = z.object({
       submission_id: z.string().nullable().default(null),
       track: trackRefSchema.nullable().default(null),
       track_locked_at: z.string().nullable().default(null),
+      timer: z.object({
+        limit_minutes: z.number(), started_at: z.string().nullable(), deadline: z.string().nullable(),
+        state: z.enum(["UNTIMED", "NOT_STARTED", "RUNNING", "EXPIRED"]),
+      }).nullable().default(null),
       awards: z.array(awardSchema).default([]),
     })
   ),
@@ -307,6 +311,7 @@ export type Submission = {
   submissionId: string | null
   track: { id: string; title: string } | null
   trackLockedAt: string | null
+  timer: { limit_minutes: number; started_at: string | null; deadline: string | null; state: "UNTIMED" | "NOT_STARTED" | "RUNNING" | "EXPIRED" } | null
   awards: Award[]
 }
 
@@ -443,6 +448,7 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
     submissionId: submission.submission_id,
     track: submission.track,
     trackLockedAt: submission.track_locked_at,
+    timer: submission.timer,
     awards: submission.awards,
   }))
 }

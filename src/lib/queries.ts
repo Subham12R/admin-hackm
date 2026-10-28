@@ -24,6 +24,7 @@ export const keys = {
   event: ["event"] as const,
   challenge: ["challenge"] as const,
   announcements: ["announcements"] as const,
+  siteNotices: ["site-notices"] as const,
   rounds: ["rounds"] as const,
   board: (id: string) => ["board", id] as const,
   results: (id: string) => ["results", id] as const,

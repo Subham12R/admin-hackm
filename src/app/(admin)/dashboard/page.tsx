@@ -134,7 +134,7 @@ export default function DashboardPage() {
       <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MetricsCard
           title="Registrations"
-          description={metrics ? `${metrics.paidTeams.toLocaleString()} paid, the rest awaiting payment` : "Active registrations"}
+          description="Active registrations"
         >
           <Metric value={metrics?.registrations} />
         </MetricsCard>

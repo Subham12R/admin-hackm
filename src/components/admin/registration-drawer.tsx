@@ -3,7 +3,7 @@
 import { useState } from "react"
 
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
-import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, StatusBadge, TextInput } from "@/components/admin/kit"
+import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, RegistrationBadge, StatusBadge, TextInput } from "@/components/admin/kit"
 import { dateTime, errorMessage, rupees } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -103,8 +103,7 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
           {data.team_id} · {data.leader_email} · registered {dateTime(data.created_at)}
         </SheetDescription>
         <div className="flex flex-wrap gap-1.5">
-          <StatusBadge status={data.status} />
-          {data.fee_waived ? <Badge tone="green">fee waived</Badge> : null}
+          <RegistrationBadge status={data.status} feeWaived={data.fee_waived} />
           {data.category ? <Badge>{data.category}</Badge> : null}
           {data.adjustment.status !== "NONE" ? <StatusBadge status={data.adjustment.status} label={`balance ${data.adjustment.status.toLowerCase()}`} /> : null}
         </div>

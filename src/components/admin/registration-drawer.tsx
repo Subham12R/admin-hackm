@@ -15,6 +15,8 @@ export type RegistrationDetail = {
   leader_email: string
   status: string
   fee_waived?: boolean
+  rejection_reason?: string | null
+  rejected_at?: string | null
   category: string | null
   pricing_tier: string
   quoted_amount_minor: number
@@ -106,8 +108,12 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
           <RegistrationBadge status={data.status} feeWaived={data.fee_waived} />
           {data.category ? <Badge>{data.category}</Badge> : null}
           {data.adjustment.status !== "NONE" ? <StatusBadge status={data.adjustment.status} label={`balance ${data.adjustment.status.toLowerCase()}`} /> : null}
+          {data.rejection_reason && data.status !== "REJECTED" ? <StatusBadge status="REJECTED" label="rejected" /> : null}
         </div>
       </SheetHeader>
+      {data.rejection_reason ? (
+        <Notice tone="red">Rejected{data.rejected_at ? ` ${dateTime(data.rejected_at)}` : ""}: {data.rejection_reason}</Notice>
+      ) : null}
 
 
       <dl className="grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3 text-sm sm:grid-cols-4">
@@ -185,9 +191,10 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
             Cancel unpaid registration
           </ConfirmButton>
         ) : null}
-        {data.status === "ABANDONED" && can.review(roles) ? (
+        {data.status === "PAID" && can.money(roles) ? <RejectForm data={data} /> : null}
+        {(data.status === "ABANDONED" || data.status === "REJECTED") && can.review(roles) ? (
           <ConfirmButton confirmLabel="Delete for good" disabled={remove.isPending}
-            onConfirm={() => report(remove.mutateAsync(undefined).then(onDeleted), "Abandoned registration deleted.")}>
+            onConfirm={() => report(remove.mutateAsync(undefined).then(onDeleted), data.status === "REJECTED" ? "Rejected registration deleted." : "Abandoned registration deleted.")}>
             Delete registration
           </ConfirmButton>
         ) : null}
@@ -227,6 +234,37 @@ function Amount({ label, value }: { label: string; value: number }) {
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="font-mono text-base font-semibold">{rupees(value)}</dd>
+    </div>
+  )
+}
+
+/** Super admins reject a registered team: whatever it paid is refunded in full and the leader is emailed the reason. */
+function RejectForm({ data }: { data: RegistrationDetail }) {
+  const [open, setOpen] = useState(false)
+  const [reason, setReason] = useState("")
+  const reject = useAdminMutation<string>((text) => ({ path: `/api/admin/registrations/${data.registration_id}/reject`, body: { reason: text } }), REGISTRATION_AREAS)
+  const refundable = data.payments.filter((payment) => payment.status === "CAPTURED").reduce((sum, payment) => sum + payment.refundable_minor, 0)
+  if (!open) return <div className="mt-2"><Button tone="red" onClick={() => setOpen(true)}>Reject registration…</Button></div>
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg bg-red-500/5 p-3 ring-1 ring-red-500/20 sm:grid-cols-[1fr_auto] sm:items-end">
+      <Field label="Reason (emailed to the leader)">
+        <TextInput value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} placeholder="e.g. Duplicate of another team" />
+      </Field>
+      <span className="flex gap-1">
+        <ConfirmButton confirmLabel={refundable ? `Reject and refund ${rupees(refundable)}` : "Reject registration"} disabled={reason.trim().length < 3 || reject.isPending}
+          onConfirm={() => void notify(reject.mutateAsync(reason.trim()), refundable
+            ? `Registration rejected; ${rupees(refundable)} is being refunded and the leader was emailed.`
+            : "Registration rejected; the leader was emailed the reason.", () => setOpen(false))}>
+          Reject team
+        </ConfirmButton>
+        <Button onClick={() => setOpen(false)}>Close</Button>
+      </span>
+      <p className="text-xs text-muted-foreground sm:col-span-2">
+        {refundable
+          ? `${rupees(refundable)} will be refunded to the payer (5–7 working days). `
+          : "No money was taken. "}
+        The team leaves every list, its name and emails are free to register again, and the leader is emailed the reason. A rejected team with no money on record can then be deleted.
+      </p>
     </div>
   )
 }

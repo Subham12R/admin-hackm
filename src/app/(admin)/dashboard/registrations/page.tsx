@@ -11,12 +11,14 @@ import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { XAxis } from "@/components/charts/x-axis"
 import { RichButton } from "@/components/rich-button"
-import { Badge, RegistrationBadge } from "@/components/admin/kit"
+import { toast } from "sonner"
+
+import { Badge, ConfirmButton, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
 import { rupees } from "@/lib/api"
-import { can, keys, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
 import {
   adminQuery,
   registrationCategories,
@@ -129,11 +131,15 @@ const registrationColumns: readonly RegistrationColumn[] = [
   },
 ]
 
+type BulkAction = "cancel" | "delete"
+type BulkResult = { action: BulkAction; done: string[]; skipped: { id: string; team_name: string | null; reason: string }[] }
+
 const statusFilters = [
   { value: "", label: "Active (pending + paid)" },
   { value: "PAID", label: "Paid" },
   { value: "PAYMENT_PENDING", label: "Awaiting payment" },
   { value: "REFUNDED", label: "Refunded (cancelled)" },
+  { value: "REJECTED", label: "Rejected" },
   { value: "ABANDONED", label: "Abandoned" },
   { value: "ALL", label: "Everything" },
 ]
@@ -146,6 +152,12 @@ export default function RegistrationsPage() {
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
+  // Super admins can tick rows on the current page and cancel or delete them in one go.
+  const bulkAllowed = can.money(roles)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const bulk = useAdminMutation<{ action: BulkAction; ids: string[] }, BulkResult>(
+    (body) => ({ path: "/api/admin/registrations/bulk", body }), [["registrations"], ["registration"], ["teams"]]
+  )
   const [selectedColumns, setSelectedColumns] = useState<RegistrationColumnKey[]>(
     registrationColumns.map((column) => column.key)
   )
@@ -174,6 +186,30 @@ export default function RegistrationsPage() {
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
+  const chosen = visibleRegistrations.filter((registration) => selected.has(registration.registrationId)).map((registration) => registration.registrationId)
+  const allChosen = visibleRegistrations.length > 0 && chosen.length === visibleRegistrations.length
+
+  function toggle(id: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function runBulk(action: BulkAction) {
+    const verb = action === "cancel" ? "cancelled" : "deleted"
+    bulk.mutateAsync({ action, ids: chosen })
+      .then((result) => {
+        setSelected(new Set())
+        const summary = `${result.done.length} ${verb}${result.skipped.length ? `, ${result.skipped.length} skipped` : ""}.`
+        const details = result.skipped.slice(0, 6).map((row) => `${row.team_name ?? "Unknown"}: ${row.reason}`).join("; ")
+        if (result.skipped.length) toast.warning(summary, { description: details + (result.skipped.length > 6 ? `; and ${result.skipped.length - 6} more` : ""), duration: 12_000 })
+        else toast.success(summary)
+      })
+      .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "The bulk action failed."))
+  }
 
   function resetPage() {
     setPage(1)
@@ -287,6 +323,7 @@ export default function RegistrationsPage() {
                   {statusFilters.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
                 {status === "REFUNDED" ? <span>Refunded teams are cancelled and hidden from every other list.</span> : null}
+                {status === "REJECTED" ? <span>Rejected free teams; delete them once they are no longer needed.</span> : null}
               </label>
               <div className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 <span id="registration-date-label">Registration date</span>
@@ -417,6 +454,15 @@ export default function RegistrationsPage() {
               <li className="py-8 text-center text-sm text-muted-foreground">{loadError || "No registrations match these filters."}</li>
             ) : null}
           </ul>
+          {bulkAllowed && chosen.length ? (
+            <div role="region" aria-label="Bulk actions" className="mb-3 hidden flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm md:flex">
+              <span className="font-medium">{chosen.length} selected</span>
+              <ConfirmButton confirmLabel={`Cancel ${chosen.length} unpaid`} disabled={bulk.isPending} onConfirm={() => runBulk("cancel")}>Cancel unpaid</ConfirmButton>
+              <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete abandoned / rejected</ConfirmButton>
+              <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
+              <span className="text-xs text-muted-foreground">Teams that do not fit an action (e.g. paid, or with a payment on record) are skipped and listed.</span>
+            </div>
+          ) : null}
           <div className="hidden md:block">
           <Table className="min-w-max">
             <TableCaption className="sr-only">
@@ -424,6 +470,12 @@ export default function RegistrationsPage() {
             </TableCaption>
             <TableHeader>
               <TableRow>
+                {bulkAllowed ? (
+                  <TableHead className="h-10 w-8">
+                    <input type="checkbox" aria-label="Select all on this page" checked={allChosen}
+                      onChange={(event) => setSelected(event.target.checked ? new Set(visibleRegistrations.map((registration) => registration.registrationId)) : new Set())} />
+                  </TableHead>
+                ) : null}
                 {visibleColumns.map((column) => (
                   <TableHead
                     key={column.key}
@@ -445,6 +497,12 @@ export default function RegistrationsPage() {
                     className="cursor-pointer"
                     aria-label={`Open ${registration.teamName}`}
                   >
+                    {bulkAllowed ? (
+                      <TableCell className="w-8" onClick={(event) => event.stopPropagation()}>
+                        <input type="checkbox" aria-label={`Select ${registration.teamName}`} checked={selected.has(registration.registrationId)}
+                          onChange={(event) => toggle(registration.registrationId, event.target.checked)} />
+                      </TableCell>
+                    ) : null}
                     {visibleColumns.map((column) => (
                       <TableCell key={column.key} className={column.className}>
                         {column.render(registration)}
@@ -455,7 +513,7 @@ export default function RegistrationsPage() {
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={visibleColumns.length}
+                    colSpan={visibleColumns.length + (bulkAllowed ? 1 : 0)}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {loadError || "No registrations match these filters."}

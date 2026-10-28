@@ -5,6 +5,7 @@ import { useState } from "react"
 
 import { Button, Field, Notice, PageHeader, Panel, StatusBadge, TextInput } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
+import { DiscountPanel, type DiscountConfig } from "@/components/admin/discount-panel"
 import { dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
@@ -27,7 +28,7 @@ export type EventConfig = {
   now: string
   starts_at: string | null
   ends_at: string | null
-  registration: Window & { enabled?: boolean; mode?: RegistrationMode; team_edits_close_at?: string | null; payment_required?: boolean }
+  registration: Window & { enabled?: boolean; mode?: RegistrationMode; team_edits_close_at?: string | null; payment_required?: boolean; discount?: DiscountConfig }
   submission: Window
   challenge: { release_at: string | null; released: boolean }
   stage?: { id: string; name: string } | null
@@ -121,6 +122,9 @@ function ScheduleEditor({ config, editable, saved }: { config: EventConfig; edit
             </p>
           </div>
         </Panel>
+        {config.registration.discount ? (
+          <DiscountPanel key={JSON.stringify({ ...config.registration.discount, state: undefined, active: undefined })} config={config.registration.discount} editable={editable} free={!paid} />
+        ) : null}
         <Panel title={`Submissions${config.stage ? ` · ${config.stage.name}` : ""}`} description={windowText(config.submission)}><StatusBadge status={config.submission.state} /></Panel>
         <Panel title="Events" description="Submission windows, problem statements and winners for each event.">
           <Link href="/dashboard/events" className="text-sm underline">Manage events</Link>

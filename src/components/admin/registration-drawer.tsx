@@ -64,6 +64,9 @@ const REVIEW_REASONS: Record<string, string> = {
   unknown_order: "Order not found",
 }
 
+const MIN_MEMBERS = 2
+const MAX_MEMBERS = 4
+
 export const REGISTRATION_AREAS = [["registration"], ["registrations"], ["teams"], ["payments-review"], ["submissions"]]
 
 export function RegistrationDrawer({ registrationId, onClose }: { registrationId: string | null; onClose: () => void }) {
@@ -88,6 +91,9 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
   const cancel = useAdminMutation<void>(() => ({ path: `/api/admin/registrations/${registrationId}/cancel` }), REGISTRATION_AREAS)
   const remove = useAdminMutation<void>(() => ({ path: `/api/admin/registrations/${registrationId}`, method: "DELETE" }), REGISTRATION_AREAS)
   const accept = useAdminMutation<string>((attemptId) => ({ path: `/api/admin/payments/${attemptId}/accept` }), REGISTRATION_AREAS)
+  const removeMember = useAdminMutation<string>((memberId) => ({ path: `/api/admin/teams/${registrationId}/members/${memberId}`, method: "DELETE" }), REGISTRATION_AREAS)
+  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
 
   function report(promise: Promise<unknown>, success: string) {
     void notify(promise, success)
@@ -96,6 +102,8 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
   const data = detail.data
   if (detail.isError) return <div className="p-4"><Notice tone="red">{errorMessage(detail.error, "Registration could not be loaded.")}</Notice></div>
   if (!data) return <div className="p-4"><LoadingRows rows={6} /></div>
+  // Organisers change a registered team's roster at any time, including after registration closes.
+  const rosterEditable = data.status === "PAID" && can.review(roles)
 
   return (
     <div className="flex flex-col gap-5 p-4 pt-0">
@@ -127,33 +135,54 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
       ) : null}
 
       <section className="space-y-2">
-        <h3 className="font-medium tracking-tight">Members and ACM review</h3>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="font-medium tracking-tight">Members and ACM review</h3>
+          {rosterEditable && data.members.length < MAX_MEMBERS && !adding ? <Button onClick={() => setAdding(true)}>Add member</Button> : null}
+        </div>
+        {rosterEditable ? (
+          <p className="text-xs text-muted-foreground">
+            Leaders add or remove members themselves only while registration is open, and each change sends their team back to review. Your changes here count as reviewed.
+          </p>
+        ) : null}
         <ul className="divide-y divide-border rounded-xl border border-border">
           {data.members.map((member) => (
-            <li key={member.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm">
-              <div className="min-w-0">
-                <p className="font-medium">{member.name} {member.role === "leader" ? <Badge>leader</Badge> : null}</p>
-                <p className="truncate text-xs text-muted-foreground">{member.email} · {member.phone} · {member.college}</p>
-                {member.is_acm_member ? (
-                  <p className="text-xs text-muted-foreground">
-                    ACM ID {member.acm_id ?? "—"} · <StatusBadge status={member.acm_review_status} />
-                    {member.acm_reviewed_by ? ` by ${member.acm_reviewed_by}` : ""}
-                  </p>
-                ) : null}
-              </div>
-              {member.is_acm_member && can.review(roles) ? (
-                <div className="flex gap-1">
-                  <Button tone="green" disabled={acmReview.isPending || member.acm_review_status === "VERIFIED"}
-                    onClick={() => report(acmReview.mutateAsync({ memberId: member.id, status: "VERIFIED" }), "ACM membership verified.")}>Verify</Button>
-                  <ConfirmButton confirmLabel="Reject claim" disabled={acmReview.isPending || member.acm_review_status === "REJECTED"}
-                    onConfirm={() => report(acmReview.mutateAsync({ memberId: member.id, status: "REJECTED" }), "Claim rejected; the leader was emailed any balance due.")}>
-                    Reject
-                  </ConfirmButton>
+            <li key={member.id} className="p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium">{member.name} {member.role === "leader" ? <Badge>leader</Badge> : null}</p>
+                  <p className="truncate text-xs text-muted-foreground">{member.email} · {member.phone} · {member.college}</p>
+                  {member.is_acm_member ? (
+                    <p className="text-xs text-muted-foreground">
+                      ACM ID {member.acm_id ?? "—"} · <StatusBadge status={member.acm_review_status} />
+                      {member.acm_reviewed_by ? ` by ${member.acm_reviewed_by}` : ""}
+                    </p>
+                  ) : null}
                 </div>
-              ) : null}
+                <div className="flex flex-wrap gap-1">
+                  {member.is_acm_member && can.review(roles) ? (
+                    <>
+                      <Button tone="green" disabled={acmReview.isPending || member.acm_review_status === "VERIFIED"}
+                        onClick={() => report(acmReview.mutateAsync({ memberId: member.id, status: "VERIFIED" }), "ACM membership verified.")}>Verify</Button>
+                      <ConfirmButton confirmLabel="Reject claim" disabled={acmReview.isPending || member.acm_review_status === "REJECTED"}
+                        onConfirm={() => report(acmReview.mutateAsync({ memberId: member.id, status: "REJECTED" }), "Claim rejected; the leader was emailed any balance due.")}>
+                        Reject
+                      </ConfirmButton>
+                    </>
+                  ) : null}
+                  {rosterEditable && editing !== member.id ? <Button onClick={() => setEditing(member.id)}>Edit</Button> : null}
+                  {rosterEditable && member.role !== "leader" && data.members.length > MIN_MEMBERS ? (
+                    <ConfirmButton confirmLabel={`Remove ${member.name}`} disabled={removeMember.isPending}
+                      onConfirm={() => report(removeMember.mutateAsync(member.id), `${member.name} was removed from the team.`)}>
+                      Remove
+                    </ConfirmButton>
+                  ) : null}
+                </div>
+              </div>
+              {editing === member.id ? <MemberForm registrationId={registrationId} member={member} onDone={() => setEditing(null)} /> : null}
             </li>
           ))}
         </ul>
+        {adding ? <MemberForm registrationId={registrationId} onDone={() => setAdding(false)} /> : null}
       </section>
 
       <section className="space-y-2">
@@ -227,6 +256,57 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
       </section>
     </div>
   )
+}
+
+type Member = RegistrationDetail["members"][number]
+
+/** Add a member, or edit one (`member` given). The leader's email is their sign-in, so it stays fixed. */
+function MemberForm({ registrationId, member, onDone }: { registrationId: string; member?: Member; onDone: () => void }) {
+  const [form, setForm] = useState({
+    full_name: member?.name ?? "", email: member?.email ?? "", phone: member?.phone ?? "", college: member?.college ?? "",
+    is_acm_member: member?.is_acm_member ?? false, acm_id: member?.acm_id ?? "",
+  })
+  const save = useAdminMutation<typeof form>((body) => member
+    ? { path: `/api/admin/teams/${registrationId}/members/${member.id}`, method: "PATCH", body: editBody(member, body) }
+    : { path: `/api/admin/teams/${registrationId}/members`, body: { ...body, acm_id: body.is_acm_member ? body.acm_id : "" } },
+  REGISTRATION_AREAS)
+  const valid = form.full_name.trim() && /^\S+@\S+\.\S+$/.test(form.email.trim()) && /^[0-9+()\-\s]{7,20}$/.test(form.phone.trim())
+    && form.college.trim() && (!form.is_acm_member || form.acm_id.trim())
+  const set = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement>) =>
+    setForm({ ...form, [key]: key === "is_acm_member" ? event.target.checked : event.target.value })
+
+  return (
+    <form className="mt-3 grid gap-2 rounded-lg bg-muted/50 p-3 sm:grid-cols-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (valid) void notify(save.mutateAsync(form), member ? "Member updated." : `${form.full_name.trim()} was added to the team.`, onDone)
+      }}>
+      <Field label="Full name"><TextInput value={form.full_name} maxLength={120} onChange={set("full_name")} /></Field>
+      <Field label="Email" hint={member?.role === "leader" ? "The leader's email is their sign-in." : undefined}>
+        <TextInput type="email" value={form.email} maxLength={320} disabled={member?.role === "leader"} onChange={set("email")} />
+      </Field>
+      <Field label="Phone"><TextInput type="tel" value={form.phone} maxLength={20} onChange={set("phone")} /></Field>
+      <Field label="College"><TextInput value={form.college} maxLength={200} onChange={set("college")} /></Field>
+      {!member ? (
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.is_acm_member} onChange={set("is_acm_member")} /> ACM member</label>
+      ) : null}
+      {form.is_acm_member ? <Field label="ACM ID" hint={member ? "A new ID needs ACM review again." : undefined}><TextInput value={form.acm_id} maxLength={80} onChange={set("acm_id")} /></Field> : null}
+      <span className="flex gap-1 sm:col-span-2">
+        <Button tone="green" type="submit" disabled={!valid || save.isPending}>{save.isPending ? "Saving…" : member ? "Save member" : "Add member"}</Button>
+        <Button type="button" onClick={onDone}>Cancel</Button>
+      </span>
+    </form>
+  )
+}
+
+function editBody(member: Member, form: { full_name: string; email: string; phone: string; college: string; acm_id: string }) {
+  const body: Record<string, string> = {}
+  if (form.full_name.trim() !== member.name) body.full_name = form.full_name.trim()
+  if (member.role !== "leader" && form.email.trim().toLowerCase() !== member.email) body.email = form.email.trim()
+  if (form.phone.trim() !== member.phone) body.phone = form.phone.trim()
+  if (form.college.trim() !== member.college) body.college = form.college.trim()
+  if (member.is_acm_member && form.acm_id.trim() && form.acm_id.trim().toUpperCase() !== member.acm_id) body.acm_id = form.acm_id.trim()
+  return body
 }
 
 function Amount({ label, value }: { label: string; value: number }) {

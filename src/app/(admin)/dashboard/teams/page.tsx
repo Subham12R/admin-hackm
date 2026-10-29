@@ -470,7 +470,7 @@ export default function TeamsPage() {
                                   onClick={() => setOpenRegistration(registration.registrationId)}
                                   className="text-sm underline underline-offset-2"
                                 >
-                                  Payments &amp; ACM review
+                                  Members, payments &amp; ACM review
                                 </button>
                                 <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                                   Details review

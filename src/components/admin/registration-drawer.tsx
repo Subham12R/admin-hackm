@@ -92,6 +92,7 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
   const remove = useAdminMutation<void>(() => ({ path: `/api/admin/registrations/${registrationId}`, method: "DELETE" }), REGISTRATION_AREAS)
   const accept = useAdminMutation<string>((attemptId) => ({ path: `/api/admin/payments/${attemptId}/accept` }), REGISTRATION_AREAS)
   const removeMember = useAdminMutation<string>((memberId) => ({ path: `/api/admin/teams/${registrationId}/members/${memberId}`, method: "DELETE" }), REGISTRATION_AREAS)
+  const makeLeader = useAdminMutation<string>((memberId) => ({ path: `/api/admin/teams/${registrationId}/leader`, body: { member_id: memberId } }), REGISTRATION_AREAS)
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
 
@@ -141,7 +142,7 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
         </div>
         {rosterEditable ? (
           <p className="text-xs text-muted-foreground">
-            Leaders add or remove members themselves only while registration is open, and each change sends their team back to review. Your changes here count as reviewed.
+            While registration is open, leaders add or remove members, change emails or hand over leadership themselves, and each of those sends their team back to review. Your changes here count as reviewed.
           </p>
         ) : null}
         <ul className="divide-y divide-border rounded-xl border border-border">
@@ -168,6 +169,12 @@ function DrawerBody({ registrationId, onDeleted }: { registrationId: string; onD
                         Reject
                       </ConfirmButton>
                     </>
+                  ) : null}
+                  {rosterEditable && member.role !== "leader" ? (
+                    <ConfirmButton tone="amber" confirmLabel={`Make ${member.name} leader`} disabled={makeLeader.isPending}
+                      onConfirm={() => report(makeLeader.mutateAsync(member.id), `${member.name} now leads the team; they were emailed how to sign in.`)}>
+                      Make leader
+                    </ConfirmButton>
                   ) : null}
                   {rosterEditable && editing !== member.id ? <Button onClick={() => setEditing(member.id)}>Edit</Button> : null}
                   {rosterEditable && member.role !== "leader" && data.members.length > MIN_MEMBERS ? (

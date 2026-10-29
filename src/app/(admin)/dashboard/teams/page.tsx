@@ -217,9 +217,9 @@ export default function TeamsPage() {
           Monitor team activity and review team details.
         </p>
         <p className="mt-2 flex flex-wrap items-center gap-3 text-xs tracking-tighter text-muted-foreground">
-          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-amber-200 bg-amber-50 shadow-[inset_3px_0_0_var(--color-amber-400)]" />Awaiting review</span>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-emerald-200 bg-emerald-50 shadow-[inset_3px_0_0_var(--color-emerald-400)]" />Verified</span>
-          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-red-200 bg-red-50 shadow-[inset_3px_0_0_var(--color-red-400)]" />Declined</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-amber-200 bg-amber-50 dark:border-amber-500/40 dark:bg-[color-mix(in_oklab,var(--color-amber-500)_12%,var(--card))] shadow-[inset_3px_0_0_var(--color-amber-400)]" />Awaiting review</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-emerald-200 bg-emerald-50 dark:border-emerald-500/40 dark:bg-[color-mix(in_oklab,var(--color-emerald-500)_12%,var(--card))] shadow-[inset_3px_0_0_var(--color-emerald-400)]" />Verified</span>
+          <span className="flex items-center gap-1.5"><span className="h-3 w-4 rounded-[3px] border border-red-200 bg-red-50 dark:border-red-500/40 dark:bg-[color-mix(in_oklab,var(--color-red-500)_12%,var(--card))] shadow-[inset_3px_0_0_var(--color-red-400)]" />Declined</span>
         </p>
       </div>
 
@@ -604,9 +604,9 @@ export default function TeamsPage() {
  * The sticky actions cell needs an opaque colour of its own.
  */
 const REVIEW_TINTS = {
-  PENDING: { row: "bg-amber-50 hover:bg-amber-100/70", cell: "bg-amber-50", bar: "shadow-[inset_3px_0_0_var(--color-amber-400)]" },
-  VERIFIED: { row: "bg-emerald-50 hover:bg-emerald-100/70", cell: "bg-emerald-50", bar: "shadow-[inset_3px_0_0_var(--color-emerald-400)]" },
-  DECLINED: { row: "bg-red-50 hover:bg-red-100/70", cell: "bg-red-50", bar: "shadow-[inset_3px_0_0_var(--color-red-400)]" },
+  PENDING: { row: "bg-amber-50 hover:bg-amber-100/70 dark:bg-[color-mix(in_oklab,var(--color-amber-500)_12%,var(--card))] dark:hover:bg-[color-mix(in_oklab,var(--color-amber-500)_18%,var(--card))]", cell: "bg-amber-50 dark:bg-[color-mix(in_oklab,var(--color-amber-500)_12%,var(--card))]", bar: "shadow-[inset_3px_0_0_var(--color-amber-400)]" },
+  VERIFIED: { row: "bg-emerald-50 hover:bg-emerald-100/70 dark:bg-[color-mix(in_oklab,var(--color-emerald-500)_12%,var(--card))] dark:hover:bg-[color-mix(in_oklab,var(--color-emerald-500)_18%,var(--card))]", cell: "bg-emerald-50 dark:bg-[color-mix(in_oklab,var(--color-emerald-500)_12%,var(--card))]", bar: "shadow-[inset_3px_0_0_var(--color-emerald-400)]" },
+  DECLINED: { row: "bg-red-50 hover:bg-red-100/70 dark:bg-[color-mix(in_oklab,var(--color-red-500)_12%,var(--card))] dark:hover:bg-[color-mix(in_oklab,var(--color-red-500)_18%,var(--card))]", cell: "bg-red-50 dark:bg-[color-mix(in_oklab,var(--color-red-500)_12%,var(--card))]", bar: "shadow-[inset_3px_0_0_var(--color-red-400)]" },
 } as const
 
 function reviewTint(team: Registration) {

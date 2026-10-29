@@ -45,10 +45,10 @@ export function Panel({ title, description, actions, children, className }: {
 
 const tones = {
   zinc: "bg-muted text-foreground/80",
-  green: "bg-emerald-50 text-emerald-700",
-  amber: "bg-amber-50 text-amber-800",
-  red: "bg-red-50 text-red-700",
-  blue: "bg-sky-50 text-sky-700",
+  green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  amber: "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+  red: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  blue: "bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
 } as const
 
 export type Tone = keyof typeof tones

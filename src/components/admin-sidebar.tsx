@@ -39,6 +39,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
@@ -57,13 +58,29 @@ import { useTheme } from "@/hooks/use-theme"
 import FallbackAvatar from "./fallback-avatar"
 import { useEffect, useState } from "react"
 
-import { can, useMe } from "@/lib/queries"
+import { can, useAttention, useMe, type AttentionCounts } from "@/lib/queries"
 
 type Access = (roles: string[]) => boolean
 
+type Pill = { count: (counts: AttentionCounts) => number; label: (counts: AttentionCounts) => string }
+
 type NavigationGroup = {
   label: string
-  items: { title: string; href: string; icon: LucideIcon; access?: Access }[]
+  items: { title: string; href: string; icon: LucideIcon; access?: Access; pill?: Pill }[]
+}
+
+const pills: Record<string, Pill> = {
+  teams: {
+    count: (counts) => (counts.teams_review ?? 0) + (counts.acm_pending ?? 0),
+    label: (counts) => `${counts.teams_review ?? 0} teams to verify, ${counts.acm_pending ?? 0} ACM ids to check`,
+  },
+  payments: { count: (counts) => counts.payments_review ?? 0, label: (counts) => `${counts.payments_review ?? 0} payments need review` },
+  contacts: { count: (counts) => counts.contacts_new ?? 0, label: (counts) => `${counts.contacts_new ?? 0} new messages` },
+  submissions: {
+    count: (counts) => counts.submissions_unassigned ?? 0,
+    label: (counts) => `${counts.submissions_unassigned ?? 0} submissions without a judge`,
+  },
+  judging: { count: (counts) => counts.my_assignments ?? 0, label: (counts) => `${counts.my_assignments ?? 0} scorecards to finish` },
 }
 
 const navigation: NavigationGroup[] = [
@@ -73,16 +90,16 @@ const navigation: NavigationGroup[] = [
   },
   {
     label: "Judging",
-    items: [{ title: "My Assignments", href: "/dashboard/judging", icon: ClipboardCheck, access: can.judge }],
+    items: [{ title: "My Assignments", href: "/dashboard/judging", icon: ClipboardCheck, access: can.judge, pill: pills.judging }],
   },
   {
     label: "Events",
     items: [
       { title: "Registrations", href: "/dashboard/registrations", icon: ClipboardList, access: can.read },
-      { title: "Payments", href: "/dashboard/payments", icon: Wallet, access: can.read },
-      { title: "Teams", href: "/dashboard/teams", icon: Users, access: can.read },
+      { title: "Payments", href: "/dashboard/payments", icon: Wallet, access: can.read, pill: pills.payments },
+      { title: "Teams", href: "/dashboard/teams", icon: Users, access: can.read, pill: pills.teams },
       { title: "Check-in", href: "/dashboard/check-in", icon: UserCheck, access: can.read },
-      { title: "Submissions", href: "/dashboard/submissions", icon: Upload, access: can.read },
+      { title: "Submissions", href: "/dashboard/submissions", icon: Upload, access: can.read, pill: pills.submissions },
       { title: "Evaluations", href: "/dashboard/evaluations", icon: Gavel, access: can.read },
       { title: "Rounds & Results", href: "/dashboard/leaderboard", icon: Trophy, access: can.read },
       { title: "Events", href: "/dashboard/events", icon: CalendarRange, access: can.read },
@@ -92,7 +109,7 @@ const navigation: NavigationGroup[] = [
   {
     label: "Communication",
     items: [
-      { title: "Contacts", href: "/dashboard/contacts", icon: MessageSquare, access: can.read },
+      { title: "Contacts", href: "/dashboard/contacts", icon: MessageSquare, access: can.read, pill: pills.contacts },
       { title: "Announcements", href: "/dashboard/announcements", icon: Megaphone, access: can.read },
       { title: "Site strip", href: "/dashboard/site-strip", icon: Rss, access: can.read },
       { title: "Email", href: "/dashboard/emails", icon: Mail, access: can.read },
@@ -116,6 +133,13 @@ const navigation: NavigationGroup[] = [
   },
 ]
 
+function visibleCount(groups: NavigationGroup[], roles: string[], counts: AttentionCounts) {
+  return groups
+    .flatMap((group) => group.items)
+    .filter((item) => item.pill && (!item.access || item.access(roles)))
+    .reduce((total, item) => total + item.pill!.count(counts), 0)
+}
+
 export function AdminSidebar() {
   const pathname = usePathname() ?? ""
   const [open, setOpen] = useState(false)
@@ -125,6 +149,14 @@ export function AdminSidebar() {
   const me = useMe()
   const user = { name: me.data?.user.display_name ?? "", email: me.data?.user.email ?? "" }
   const roles = me.data?.user.roles ?? []
+  const counts = useAttention(Boolean(me.data))
+  const waiting = visibleCount(navigation, roles, counts)
+
+  // The tab title carries the total, so waiting work shows even from another tab.
+  useEffect(() => {
+    const base = "HackMatrix Admin"
+    document.title = waiting ? `(${waiting > 99 ? "99+" : waiting}) ${base}` : base
+  }, [waiting, pathname])
   // Hide links the backend would refuse; until roles load, show nothing role-gated.
   const visibleNavigation = navigation
     .map((group) => ({ ...group, items: me.data ? group.items.filter((item) => !item.access || item.access(roles)) : [] }))
@@ -171,6 +203,7 @@ export function AdminSidebar() {
                       pathname === item.href ||
                       (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`))
                     const Icon = item.icon
+                    const pending = item.pill ? item.pill.count(counts) : 0
 
                     return (
                       <SidebarMenuItem key={item.href}>
@@ -181,9 +214,23 @@ export function AdminSidebar() {
                           tooltip={item.title}
                           className="rounded-md"
                         >
-                          <Icon />
+                          <span className="relative flex">
+                            <Icon />
+                            {pending ? (
+                              <span aria-hidden="true" className="absolute -top-1 -right-1 hidden size-2 rounded-full bg-amber-500 ring-2 ring-sidebar group-data-[collapsible=icon]:block" />
+                            ) : null}
+                          </span>
                           <span className="font-pixel-square text-md">{item.title}</span>
+                          {pending ? <span className="sr-only">, {item.pill!.label(counts)}</span> : null}
                         </SidebarMenuButton>
+                        {pending ? (
+                          <SidebarMenuBadge
+                            title={item.pill!.label(counts)}
+                            className="rounded-full bg-amber-500/15 px-1.5 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300"
+                          >
+                            {pending > 99 ? "99+" : pending}
+                          </SidebarMenuBadge>
+                        ) : null}
                       </SidebarMenuItem>
                     )
                   })}

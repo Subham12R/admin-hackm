@@ -15,6 +15,8 @@ import { toast } from "sonner"
 
 import { Badge, ConfirmButton, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
 import { rupees } from "@/lib/api"
@@ -149,8 +151,8 @@ export default function RegistrationsPage() {
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [status, setStatus] = useState("")
-  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  const search = useTableSearch(() => setPage(1))
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   // Super admins can tick rows on the current page and cancel or delete them in one go.
   const bulkAllowed = can.money(roles)
@@ -167,7 +169,7 @@ export default function RegistrationsPage() {
   if (date) params.set("date", format(date, "yyyy-MM-dd"))
   if (category !== "all") params.set("category", category)
   if (status) params.set("status", status)
-  if (search.trim()) params.set("search", search.trim())
+  if (search.term) params.set("search", search.term)
   const query = useQuery({
     queryKey: keys.registrations(params.toString()),
     queryFn: adminQuery(`/api/admin/registrations?${params}`, registrationsPageSchema),
@@ -182,7 +184,7 @@ export default function RegistrationsPage() {
   const chartData = data?.dailyCounts ?? []
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all" || Boolean(status) || Boolean(search)
+  const hasFilters = Boolean(date) || category !== "all" || Boolean(status) || Boolean(search.term)
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -219,7 +221,7 @@ export default function RegistrationsPage() {
     setDate(undefined)
     setCategory("all")
     setStatus("")
-    setSearch("")
+    search.setValue("")
     resetPage()
   }
 
@@ -304,15 +306,7 @@ export default function RegistrationsPage() {
               </p>
             </div>
             <div className="grid w-full grid-cols-2 items-end gap-2 sm:flex sm:w-auto sm:flex-wrap">
-              <label className="col-span-2 flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
-                Search
-                <input
-                  value={search}
-                  onChange={(event) => { setSearch(event.target.value); resetPage() }}
-                  placeholder="Team or leader email"
-                  className="h-8 w-full rounded-md sm:w-48 border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </label>
+              <SearchBox className="col-span-2" value={search.value} onChange={search.setValue} placeholder="Team, leader email or HM- code" />
               <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 Status
                 <select

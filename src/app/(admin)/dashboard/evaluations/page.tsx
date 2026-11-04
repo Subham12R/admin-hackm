@@ -30,7 +30,7 @@ export default function EvaluationsPage() {
   const term = search.trim().toLowerCase()
   const visible = rows.filter((row) =>
     (round === "all" || row.roundId === round) &&
-    (!term || [row.teamName, row.teamId, row.evaluatedBy].some((value) => value.toLowerCase().includes(term)))
+    (!term || [row.teamName, row.teamId, row.anonymousCode ?? "", row.evaluatedBy].some((value) => value.toLowerCase().includes(term)))
   )
   const criteria = visible[0]?.criteria ?? []
   const sameRubric = visible.every((row) => row.roundId === visible[0]?.roundId)
@@ -50,7 +50,7 @@ export default function EvaluationsPage() {
               </Select>
             </Field>
             <Field label="Search">
-              <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team or judge" />
+              <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team, submission code or judge" />
             </Field>
           </>
         }

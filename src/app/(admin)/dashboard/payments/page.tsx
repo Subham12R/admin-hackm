@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { dateTime, errorMessage, rupees } from "@/lib/api"
 import { adminQuery, overviewSchema, toOverview } from "@/lib/admin-client"
 import { notify } from "@/lib/notify"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 
 type ReviewItem = {
@@ -44,7 +46,12 @@ export default function PaymentsPage() {
   // Same numbers as the overview, so they never disagree.
   const overview = useQuery({ queryKey: keys.overview, queryFn: adminQuery("/api/admin/overview", overviewSchema), select: toOverview, refetchInterval: 60_000 })
   const [open, setOpen] = useState<string | null>(null)
-  const items = review.data?.items ?? []
+  const search = useTableSearch()
+  const needle = search.term.toLowerCase()
+  const all = review.data?.items ?? []
+  const items = needle
+    ? all.filter((item) => [item.team_name, item.leader_email, item.provider_payment_id, item.provider_order_id].some((value) => value?.toLowerCase().includes(needle)))
+    : all
   const metrics = overview.data?.metrics
 
   return (
@@ -58,7 +65,8 @@ export default function PaymentsPage() {
           </p>
         ) : <p className="text-sm text-muted-foreground">{overview.isError ? "Counts could not be loaded." : "Loading…"}</p>}
       </Panel>
-      <Panel title="Needs review" description={`${items.length} payment${items.length === 1 ? "" : "s"} awaiting a decision`}>
+      <Panel title="Needs review" description={`${all.length} payment${all.length === 1 ? "" : "s"} awaiting a decision${needle ? `, ${items.length} matching` : ""}`}
+        actions={<SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Team, email or payment id" />}>
         {review.isError ? <Notice tone="red">{errorMessage(review.error, "Payments could not be loaded.")}</Notice> : null}
         <Bones name="payments-review" loading={review.isPending}>
         {items.length ? (

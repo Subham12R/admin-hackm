@@ -41,9 +41,11 @@ export const keys = {
   candidates: (body: string) => ["candidates", body] as const,
   credentials: (params: string) => ["credentials", params] as const,
   judgeAssignment: (id: string) => ["judge-assignment", id] as const,
+  attention: ["attention"] as const,
 }
 
-const AGGREGATES: QueryKey[] = [["overview"], ["analytics"], ["logs"]]
+// The sidebar pills refresh after every write too, so a count drops as soon as you clear an item.
+const AGGREGATES: QueryKey[] = [["overview"], ["analytics"], ["logs"], ["attention"]]
 
 export function useAdminQuery<T>(key: QueryKey, path: string | null, options?: { refetchInterval?: number; enabled?: boolean }) {
   return useQuery({
@@ -88,4 +90,22 @@ export const can = {
   superAdmin: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   judge: (roles: string[]) => roles.includes("JUDGE"),
   checkin: (roles: string[]) => roles.some((role) => ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "SUPPORT_ADMIN"].includes(role)),
+}
+
+/** Work waiting on staff, per sidebar item; the backend only returns counts the caller's roles can act on. */
+export type AttentionCounts = Partial<Record<
+  "teams_review" | "acm_pending" | "payments_review" | "contacts_new" | "submissions_unassigned" | "my_assignments",
+  number
+>>
+
+export function useAttention(enabled: boolean) {
+  const query = useQuery({
+    queryKey: keys.attention,
+    queryFn: ({ signal }) => api<{ counts: AttentionCounts }>("/api/admin/attention", { signal }),
+    enabled,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  })
+  return query.data?.counts ?? {}
 }

@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react"
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { api, dateTime, errorMessage } from "@/lib/api"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
 import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
@@ -23,7 +25,10 @@ export default function ContactsPage() {
   const [status, setStatus] = useState<string>("ACTIVE")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string | null>(null)
-  const params = new URLSearchParams({ status, page: String(page), page_size: "20" }).toString()
+  const search = useTableSearch(() => setPage(1))
+  const query = new URLSearchParams({ status, page: String(page), page_size: "20" })
+  if (search.term) query.set("search", search.term)
+  const params = query.toString()
   const list = useQuery({
     queryKey: keys.contacts(params),
     queryFn: ({ signal }) => api<ContactPage>(`/api/admin/contacts?${params}`, { signal }),
@@ -41,9 +46,12 @@ export default function ContactsPage() {
           title="Inbox"
           description={list.data ? `${list.data.counts.NEW ?? 0} new · ${list.data.counts.OPEN ?? 0} in progress · ${list.data.counts.RESOLVED ?? 0} resolved` : undefined}
           actions={
-            <Select value={status} aria-label="Filter messages" onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
-              {FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </Select>
+            <div className="flex flex-wrap items-end gap-2">
+              <SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Name, email or subject" />
+              <Select value={status} aria-label="Filter messages" onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
+                {FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </Select>
+            </div>
           }
         >
           {list.isError ? <Notice tone="red">{errorMessage(list.error, "Messages could not be loaded.")}</Notice> : null}

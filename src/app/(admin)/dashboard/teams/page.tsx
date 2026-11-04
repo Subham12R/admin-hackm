@@ -13,6 +13,8 @@ import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
 import { Badge, RegistrationBadge, StatusBadge } from "@/components/admin/kit"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { FinalsDecisions } from "@/components/admin/finals-decisions"
 import { rupees } from "@/lib/api"
@@ -136,6 +138,7 @@ export default function TeamsPage() {
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [finals, setFinals] = useState<TeamFinals["status"] | "all">("all")
   const [page, setPage] = useState(1)
+  const search = useTableSearch(() => setPage(1))
   const [expandedRegistration, setExpandedRegistration] = useState<string | null>(null)
   const [selectedColumns, setSelectedColumns] = useState<RegistrationColumnKey[]>(
     registrationColumns
@@ -147,6 +150,7 @@ export default function TeamsPage() {
   if (date) params.set("date", format(date, "yyyy-MM-dd"))
   if (category !== "all") params.set("category", category)
   if (finals !== "all") params.set("finals", finals)
+  if (search.term) params.set("search", search.term)
   const query = useQuery({
     queryKey: keys.teams(params.toString()),
     queryFn: adminQuery(`/api/admin/teams?${params}`, teamsPageSchema),
@@ -172,7 +176,7 @@ export default function TeamsPage() {
   }))
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all" || finals !== "all"
+  const hasFilters = Boolean(date) || category !== "all" || finals !== "all" || Boolean(search.term)
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -185,6 +189,7 @@ export default function TeamsPage() {
     setDate(undefined)
     setCategory("all")
     setFinals("all")
+    search.setValue("")
     resetPage()
   }
 
@@ -272,6 +277,7 @@ export default function TeamsPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-2">
+              <SearchBox value={search.value} onChange={search.setValue} placeholder="Team, leader email or HM- code" />
               <div className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 <span id="registration-date-label">Registration date</span>
                 <Popover>

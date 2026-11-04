@@ -14,6 +14,7 @@ import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
 import { Badge, RegistrationBadge, StatusBadge } from "@/components/admin/kit"
 import { SearchBox } from "@/components/admin/search-box"
+import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { FinalsDecisions } from "@/components/admin/finals-decisions"
@@ -133,6 +134,8 @@ const FINALS_LABELS: Record<TeamFinals["status"], string> = { PENDING: "not deci
 export default function TeamsPage() {
   const me = useMe()
   const canReview = can.review(me.data?.user.roles ?? [])
+  const canEmail = can.eventControl(me.data?.user.roles ?? [])
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
@@ -180,6 +183,17 @@ export default function TeamsPage() {
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
+  const chosen = visibleRegistrations.filter((registration) => selected.has(registration.registrationId)).map((registration) => registration.registrationId)
+  const span = visibleColumns.length + 1 + (canEmail ? 1 : 0)
+
+  function toggle(id: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
 
   function resetPage() {
     setPage(1)
@@ -381,6 +395,7 @@ export default function TeamsPage() {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
               <RichButton
                 type="button"
                 color="zinc"
@@ -394,12 +409,26 @@ export default function TeamsPage() {
             </div>
           </div>
 
+          {canEmail && chosen.length ? (
+            <div role="region" aria-label="Selected teams" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+              <span className="font-medium">{chosen.length} selected</span>
+              <EmailSelected ids={chosen} />
+              <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
+            </div>
+          ) : null}
           <Table className="min-w-[1200px]">
             <TableCaption className="sr-only">
               Registrations with date, team, leader, contact, college, team size, ACM status, and category.
             </TableCaption>
             <TableHeader>
               <TableRow>
+                {canEmail ? (
+                  <TableHead className="h-10 w-8">
+                    <input type="checkbox" aria-label="Select all on this page"
+                      checked={visibleRegistrations.length > 0 && chosen.length === visibleRegistrations.length}
+                      onChange={(event) => setSelected(event.target.checked ? new Set(visibleRegistrations.map((registration) => registration.registrationId)) : new Set())} />
+                  </TableHead>
+                ) : null}
                 {visibleColumns.map((column) => (
                   <TableHead
                     key={column.key}
@@ -417,7 +446,7 @@ export default function TeamsPage() {
               {data === null && !loadError ? (
                 Array.from({ length: 3 }, (_, index) => (
                   <TableRow key={index} aria-hidden="true">
-                    <TableCell colSpan={visibleColumns.length + 1}>
+                    <TableCell colSpan={span}>
                       <div className="h-5 w-full animate-pulse rounded bg-muted" />
                     </TableCell>
                   </TableRow>
@@ -430,8 +459,14 @@ export default function TeamsPage() {
                   return (
                     <Fragment key={registration.registrationId}>
                       <TableRow className={reviewTint(registration)?.row}>
+                        {canEmail ? (
+                          <TableCell className={`w-8 ${reviewTint(registration)?.bar ?? ""}`}>
+                            <input type="checkbox" aria-label={`Select ${registration.teamName}`} checked={selected.has(registration.registrationId)}
+                              onChange={(event) => toggle(registration.registrationId, event.target.checked)} />
+                          </TableCell>
+                        ) : null}
                         {visibleColumns.map((column, columnIndex) => (
-                          <TableCell key={column.key} className={`${column.className ?? ""} ${columnIndex === 0 ? reviewTint(registration)?.bar ?? "" : ""}`}>
+                          <TableCell key={column.key} className={`${column.className ?? ""} ${columnIndex === 0 && !canEmail ? reviewTint(registration)?.bar ?? "" : ""}`}>
                             {column.render(registration)}
                           </TableCell>
                         ))}
@@ -456,7 +491,7 @@ export default function TeamsPage() {
                       </TableRow>
                       {isExpanded ? (
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
-                          <TableCell colSpan={visibleColumns.length + 1} className="whitespace-normal p-4">
+                          <TableCell colSpan={span} className="whitespace-normal p-4">
                             <div className="space-y-4">
                               <div className="flex flex-wrap items-end justify-between gap-3">
                                 <div>
@@ -557,7 +592,7 @@ export default function TeamsPage() {
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={visibleColumns.length + 1}
+                    colSpan={span}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {loadError || "No registrations match these filters."}

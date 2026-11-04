@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { Badge, ConfirmButton, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { SearchBox } from "@/components/admin/search-box"
+import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
@@ -156,6 +157,9 @@ export default function RegistrationsPage() {
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   // Super admins can tick rows on the current page and cancel or delete them in one go.
   const bulkAllowed = can.money(roles)
+  // Event Control can tick rows too, to email them.
+  const canEmail = can.eventControl(roles)
+  const selectable = bulkAllowed || canEmail
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const bulk = useAdminMutation<{ action: BulkAction; ids: string[] }, BulkResult>(
     (body) => ({ path: "/api/admin/registrations/bulk", body }), [["registrations"], ["registration"], ["teams"]]
@@ -406,6 +410,7 @@ export default function RegistrationsPage() {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
               <RichButton
                 type="button"
                 color="zinc"
@@ -448,13 +453,18 @@ export default function RegistrationsPage() {
               <li className="py-8 text-center text-sm text-muted-foreground">{loadError || "No registrations match these filters."}</li>
             ) : null}
           </ul>
-          {bulkAllowed && chosen.length ? (
+          {selectable && chosen.length ? (
             <div role="region" aria-label="Bulk actions" className="mb-3 hidden flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm md:flex">
               <span className="font-medium">{chosen.length} selected</span>
-              <ConfirmButton confirmLabel={`Cancel ${chosen.length} unpaid`} disabled={bulk.isPending} onConfirm={() => runBulk("cancel")}>Cancel unpaid</ConfirmButton>
-              <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete abandoned / rejected</ConfirmButton>
+              {canEmail ? <EmailSelected ids={chosen} /> : null}
+              {bulkAllowed ? (
+                <>
+                  <ConfirmButton confirmLabel={`Cancel ${chosen.length} unpaid`} disabled={bulk.isPending} onConfirm={() => runBulk("cancel")}>Cancel unpaid</ConfirmButton>
+                  <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete abandoned / rejected</ConfirmButton>
+                </>
+              ) : null}
               <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
-              <span className="text-xs text-muted-foreground">Teams that do not fit an action (e.g. paid, or with a payment on record) are skipped and listed.</span>
+              {bulkAllowed ? <span className="text-xs text-muted-foreground">Teams that do not fit an action (e.g. paid, or with a payment on record) are skipped and listed.</span> : null}
             </div>
           ) : null}
           <div className="hidden md:block">
@@ -464,7 +474,7 @@ export default function RegistrationsPage() {
             </TableCaption>
             <TableHeader>
               <TableRow>
-                {bulkAllowed ? (
+                {selectable ? (
                   <TableHead className="h-10 w-8">
                     <input type="checkbox" aria-label="Select all on this page" checked={allChosen}
                       onChange={(event) => setSelected(event.target.checked ? new Set(visibleRegistrations.map((registration) => registration.registrationId)) : new Set())} />
@@ -491,7 +501,7 @@ export default function RegistrationsPage() {
                     className="cursor-pointer"
                     aria-label={`Open ${registration.teamName}`}
                   >
-                    {bulkAllowed ? (
+                    {selectable ? (
                       <TableCell className="w-8" onClick={(event) => event.stopPropagation()}>
                         <input type="checkbox" aria-label={`Select ${registration.teamName}`} checked={selected.has(registration.registrationId)}
                           onChange={(event) => toggle(registration.registrationId, event.target.checked)} />
@@ -507,7 +517,7 @@ export default function RegistrationsPage() {
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={visibleColumns.length + (bulkAllowed ? 1 : 0)}
+                    colSpan={visibleColumns.length + (selectable ? 1 : 0)}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {loadError || "No registrations match these filters."}

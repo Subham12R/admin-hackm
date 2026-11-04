@@ -7,7 +7,7 @@ import { Badge, Button, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, 
 import { Bones } from "@/components/admin/bones"
 import { ApiError, dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
-import { can, useAdminMutation, useMe } from "@/lib/queries"
+import { can, useAdminMutation, useRoles } from "@/lib/queries"
 import { ELIGIBILITY, useStages, type Resource, type Stage, type Track } from "@/lib/stages"
 
 const AREAS = [["stages"], ["submissions"], ["event"], ["challenge"]]
@@ -20,8 +20,7 @@ const SCHEDULE = [
 type ScheduleKey = (typeof SCHEDULE)[number][0]
 
 export default function EventsPage() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const stages = useStages()
 
   if (stages.isError) return <Notice tone="red">{errorMessage(stages.error, "Events could not be loaded.")}</Notice>

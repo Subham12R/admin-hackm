@@ -8,10 +8,11 @@ import { BarXAxis } from "@/components/charts/bar-x-axis"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { Badge, Button, Empty, Field, Notice, PageHeader, Panel, Select, TextInput } from "@/components/admin/kit"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { Bones } from "@/components/admin/bones"
 import { errorMessage } from "@/lib/api"
 import { notify } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 
 import { MetricsCard } from "../../components/ui/metricscard"
 
@@ -53,8 +54,7 @@ function progressOf(team: CheckinTeam): Exclude<Progress, "all"> {
 }
 
 export default function CheckInPage() {
-  const me = useMe()
-  const canCheckIn = can.checkin(me.data?.user.roles ?? [])
+  const canCheckIn = can.checkin(useRoles())
   // Polled so several check-in desks see each other's arrivals.
   const query = useAdminQuery<Checkins>(keys.checkins(""), "/api/admin/checkins", { refetchInterval: 10_000 })
   const [search, setSearch] = useState("")
@@ -124,6 +124,8 @@ export default function CheckInPage() {
             <Field label="Search">
               <TextInput value={search} placeholder="Team, name, email or phone" className="w-full sm:w-64" onChange={(event) => setSearch(event.target.value)} />
             </Field>
+            <ExportCsv datasets={["checkins"]} filters={{ search: search.trim() || undefined }}
+              ignored={progress !== "all" ? "The progress filter is not applied; the file lists every member who has checked in." : undefined} />
             <Field label="Progress">
               <Select value={progress} onChange={(event) => setProgress(event.target.value as Progress)}>
                 <option value="all">All teams</option>

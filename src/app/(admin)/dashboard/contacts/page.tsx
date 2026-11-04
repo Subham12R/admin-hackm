@@ -6,7 +6,10 @@ import { useEffect, useRef, useState } from "react"
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { api, dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
+import { ExportCsv } from "@/components/admin/export-csv"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 type Contact = { id: string; name: string; email: string; subject: string; preview: string; status: string; assigned_to: string | null; created_at: string; updated_at: string }
@@ -18,12 +21,14 @@ const FILTERS = [["ACTIVE", "Open inbox"], ["NEW", "New"], ["OPEN", "In progress
 const AREA = [["contacts"], ["contact"]]
 
 export default function ContactsPage() {
-  const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   const [status, setStatus] = useState<string>("ACTIVE")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string | null>(null)
-  const params = new URLSearchParams({ status, page: String(page), page_size: "20" }).toString()
+  const search = useTableSearch(() => setPage(1))
+  const query = new URLSearchParams({ status, page: String(page), page_size: "20" })
+  if (search.term) query.set("search", search.term)
+  const params = query.toString()
   const list = useQuery({
     queryKey: keys.contacts(params),
     queryFn: ({ signal }) => api<ContactPage>(`/api/admin/contacts?${params}`, { signal }),
@@ -35,15 +40,19 @@ export default function ContactsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Contacts" description="Messages from the public contact form. Replies are emailed to the sender; notes stay internal." />
+      <PageHeader title="Contacts" description="Messages from the public contact form. Replies are emailed to the sender; notes stay internal."
+        actions={<ExportCsv datasets={["contacts"]} filters={{ status, search: search.term || undefined }} />} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Panel
           title="Inbox"
           description={list.data ? `${list.data.counts.NEW ?? 0} new · ${list.data.counts.OPEN ?? 0} in progress · ${list.data.counts.RESOLVED ?? 0} resolved` : undefined}
           actions={
-            <Select value={status} aria-label="Filter messages" onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
-              {FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </Select>
+            <div className="flex flex-wrap items-end gap-2">
+              <SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Name, email or subject" />
+              <Select value={status} aria-label="Filter messages" onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
+                {FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </Select>
+            </div>
           }
         >
           {list.isError ? <Notice tone="red">{errorMessage(list.error, "Messages could not be loaded.")}</Notice> : null}

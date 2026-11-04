@@ -5,16 +5,16 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { Badge, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, TextInput } from "@/components/admin/kit"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Bones } from "@/components/admin/bones"
 import { adminQuery, evaluationsSchema, toEvaluations } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 export default function EvaluationsPage() {
-  const me = useMe()
-  const canReopen = can.assign(me.data?.user.roles ?? [])
+  const canReopen = can.assign(useRoles())
   const evaluations = useQuery({
     queryKey: keys.evaluations,
     queryFn: adminQuery("/api/admin/evaluations", evaluationsSchema),
@@ -30,14 +30,16 @@ export default function EvaluationsPage() {
   const term = search.trim().toLowerCase()
   const visible = rows.filter((row) =>
     (round === "all" || row.roundId === round) &&
-    (!term || [row.teamName, row.teamId, row.evaluatedBy].some((value) => value.toLowerCase().includes(term)))
+    (!term || [row.teamName, row.teamId, row.anonymousCode ?? "", row.evaluatedBy].some((value) => value.toLowerCase().includes(term)))
   )
   const criteria = visible[0]?.criteria ?? []
   const sameRubric = visible.every((row) => row.roundId === visible[0]?.roundId)
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Evaluations" description="Submitted scorecards. Totals are weighted percentages of each round's rubric." />
+      <PageHeader title="Evaluations" description="Submitted scorecards. Totals are weighted percentages of each round's rubric."
+        actions={<ExportCsv datasets={["scores"]} filters={{ round_id: round !== "all" ? round : undefined }}
+          ignored={term ? "The search box is not applied; the round filter is." : undefined} />} />
       <Panel
         title="Scorecards"
         description={`${visible.length} of ${rows.length} scorecards`}
@@ -50,7 +52,7 @@ export default function EvaluationsPage() {
               </Select>
             </Field>
             <Field label="Search">
-              <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team or judge" />
+              <TextInput value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Team, submission code or judge" />
             </Field>
           </>
         }

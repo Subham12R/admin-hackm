@@ -10,7 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { dateTime, errorMessage, rupees } from "@/lib/api"
 import { adminQuery, overviewSchema, toOverview } from "@/lib/admin-client"
 import { notify } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
+import { ExportCsv } from "@/components/admin/export-csv"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 
 type ReviewItem = {
   id: string
@@ -38,18 +41,23 @@ const REASONS: Record<string, string> = {
 const RAZORPAY_PAYMENT = "https://dashboard.razorpay.com/app/payments/"
 
 export default function PaymentsPage() {
-  const me = useMe()
-  const money = can.money(me.data?.user.roles ?? [])
+  const money = can.money(useRoles())
   const review = useAdminQuery<{ items: ReviewItem[] }>(keys.paymentsReview, "/api/admin/payments/review", { refetchInterval: 30_000 })
   // Same numbers as the overview, so they never disagree.
   const overview = useQuery({ queryKey: keys.overview, queryFn: adminQuery("/api/admin/overview", overviewSchema), select: toOverview, refetchInterval: 60_000 })
   const [open, setOpen] = useState<string | null>(null)
-  const items = review.data?.items ?? []
+  const search = useTableSearch()
+  const needle = search.term.toLowerCase()
+  const all = review.data?.items ?? []
+  const items = needle
+    ? all.filter((item) => [item.team_name, item.leader_email, item.provider_payment_id, item.provider_order_id].some((value) => value?.toLowerCase().includes(needle)))
+    : all
   const metrics = overview.data?.metrics
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Payments" description="Captured money that could not be matched to a registration automatically. Nothing here is lost; each needs a decision." />
+      <PageHeader title="Payments" description="Captured money that could not be matched to a registration automatically. Nothing here is lost; each needs a decision."
+        actions={<ExportCsv datasets={["payments"]} filters={{ search: search.term || undefined }} />} />
       <Panel title="Registration payments" description="Teams with an active registration.">
         {metrics ? (
           <p className="text-sm tracking-tighter">
@@ -58,7 +66,8 @@ export default function PaymentsPage() {
           </p>
         ) : <p className="text-sm text-muted-foreground">{overview.isError ? "Counts could not be loaded." : "Loading…"}</p>}
       </Panel>
-      <Panel title="Needs review" description={`${items.length} payment${items.length === 1 ? "" : "s"} awaiting a decision`}>
+      <Panel title="Needs review" description={`${all.length} payment${all.length === 1 ? "" : "s"} awaiting a decision${needle ? `, ${items.length} matching` : ""}`}
+        actions={<SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Team, email or payment id" />}>
         {review.isError ? <Notice tone="red">{errorMessage(review.error, "Payments could not be loaded.")}</Notice> : null}
         <Bones name="payments-review" loading={review.isPending}>
         {items.length ? (

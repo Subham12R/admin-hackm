@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Badge, Empty, LoadingRows, Notice, PageHeader, Panel, StatusBadge } from "@/components/admin/kit"
 import { errorMessage } from "@/lib/api"
 import { keys, useAdminQuery } from "@/lib/queries"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
 
 export type JudgeItem = {
   assignment_id: string
@@ -17,7 +19,10 @@ export type JudgeItem = {
 
 export default function JudgingPage() {
   const list = useAdminQuery<{ items: JudgeItem[] }>(keys.judgeAssignments, "/api/judge/assignments", { refetchInterval: 60_000 })
-  const items = list.data?.items ?? []
+  const search = useTableSearch()
+  const needle = search.term.toLowerCase()
+  const all = list.data?.items ?? []
+  const items = needle ? all.filter((item) => [item.code ?? "", item.project_name].some((value) => value.toLowerCase().includes(needle))) : all
   const rounds = [...new Map(items.map((item) => [item.round.id, item.round])).values()]
   const done = items.filter((item) => item.scorecard_status === "SUBMITTED").length
 
@@ -25,7 +30,8 @@ export default function JudgingPage() {
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="My Assignments" description="Projects are anonymous: you see a code and the project's links, never the team." />
       {list.isError ? <Notice tone="red">{errorMessage(list.error, "Assignments could not be loaded.")}</Notice> : null}
-      {list.isPending ? <LoadingRows rows={5} /> : !items.length ? <Panel><Empty>No projects are assigned to you yet.</Empty></Panel> : (
+      {all.length ? <SearchBox value={search.value} onChange={search.setValue} placeholder="Submission code or project" /> : null}
+      {list.isPending ? <LoadingRows rows={5} /> : !items.length ? <Panel><Empty>{all.length ? "No assignments match your search." : "No projects are assigned to you yet."}</Empty></Panel> : (
         <>
           <p className="text-sm text-muted-foreground">{done} of {items.length} scored</p>
           {rounds.map((round) => (

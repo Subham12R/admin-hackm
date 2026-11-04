@@ -22,7 +22,7 @@ import {
   type LayoutField,
 } from "@/lib/credentials"
 import { notify, toast } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { useStages, type Stage } from "@/lib/stages"
 import { cn } from "@/lib/utils"
 
@@ -45,8 +45,7 @@ export default function CertificatesPage() {
 }
 
 function Certificates() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()

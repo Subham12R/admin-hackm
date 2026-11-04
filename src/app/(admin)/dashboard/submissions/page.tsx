@@ -10,8 +10,11 @@ import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, P
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { adminQuery, evaluatorsSchema, submissionsSchema, toSubmissions, type Submission } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
-import { notify } from "@/lib/notify"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
+import { notify, toast } from "@/lib/notify"
+import { SearchBox } from "@/components/admin/search-box"
+import { useTableSearch } from "@/hooks/use-table-search"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { PLACEMENTS, useStages } from "@/lib/stages"
 
 const statusTone = { Draft: "zinc", Submitted: "amber", Evaluated: "green" } as const
@@ -27,8 +30,7 @@ export default function SubmissionsPage() {
 }
 
 function Submissions() {
-  const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   const canAssign = can.assign(roles)
   const router = useRouter()
   const pathname = usePathname()
@@ -55,6 +57,8 @@ function Submissions() {
   })
   const [expanded, setExpanded] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | Submission["status"]>("all")
+  const search = useTableSearch()
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const assign = useAdminMutation<{ registrationId: string; email: string }>(
     ({ registrationId, email }) => ({ path: `/api/admin/submissions/${registrationId}/assign?stage_id=${stageId}`, body: { assignee_email: email } }),
     [["submissions"], ["evaluators"], ["board"]]
@@ -72,8 +76,21 @@ function Submissions() {
   }
 
   const rows = submissions.data ? toSubmissions(submissions.data) : []
-  const visible = rows.filter((row) => (filter === "all" || row.status === filter) && (!unchosen || !row.track))
+  const needle = search.term.toLowerCase()
+  const visible = rows.filter((row) => (filter === "all" || row.status === filter) && (!unchosen || !row.track) && (!needle || matches(row, needle)))
   const round = submissions.data?.round
+  // Ticks only count for rows still on screen that can take a judge.
+  const selectable = canAssign && round && round.status !== "CLOSED" ? visible.filter((row) => row.canAssign) : []
+  const chosen = selectable.filter((row) => selected.has(row.registrationId)).map((row) => row.registrationId)
+  const columns = selectable.length ? 9 : 8
+  function toggle(id: string, checked: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
   const stage = submissions.data?.stage
   const tracks = submissions.data?.tracks ?? []
   const winners = rows.filter((row) => row.awards.length)
@@ -101,6 +118,9 @@ function Submissions() {
                 {tracks.length > 1 ? <option value="none">Not chosen yet</option> : null}
               </Select>
             </Field>
+            <ExportCsv datasets={["submissions"]} selectedIds={chosen}
+              filters={{ stage_id: stageId || undefined, track_id: trackId || undefined, search: search.term || undefined }}
+              ignored={unchosen ? "\"Not chosen yet\" is not applied; the export covers every problem statement." : undefined} />
           </div>
         }
       />
@@ -122,19 +142,38 @@ function Submissions() {
         title={stage ? `${stage.name} submissions` : "Submissions"}
         description={`${rows.filter((row) => row.submissionStatus === "SUBMITTED").length} final, ${rows.filter((row) => row.submissionStatus === "DRAFT").length} drafts, ${rows.filter((row) => row.submissionStatus === "NOT_STARTED").length} not started`}
         actions={
-          <Select aria-label="Filter by status" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
-            <option value="all">All statuses</option>
-            <option value="Draft">Draft / not started</option>
-            <option value="Submitted">Submitted</option>
-            <option value="Evaluated">Evaluated</option>
-          </Select>
+          <div className="flex flex-wrap items-end gap-2">
+            <SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Team, submission code or project" />
+            <Select aria-label="Filter by status" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
+              <option value="all">All statuses</option>
+              <option value="Draft">Draft / not started</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Evaluated">Evaluated</option>
+            </Select>
+          </div>
         }
       >
         {submissions.isError ? <Notice tone="red">{errorMessage(submissions.error, "Submissions could not be loaded.")}</Notice> : null}
+        {chosen.length && round && evaluators.data ? (
+          <BulkAssignBar
+            roundId={round.id}
+            roundName={round.name}
+            registrationIds={chosen}
+            judges={evaluators.data.evaluators}
+            onDone={() => setSelected(new Set())}
+          />
+        ) : null}
         <Table className="min-w-[1100px]">
           <TableCaption className="sr-only">Team submissions with links, status, and judges.</TableCaption>
           <TableHeader>
             <TableRow>
+              {selectable.length ? (
+                <TableHead className="h-10 w-8">
+                  <input type="checkbox" aria-label="Select every submission that can take a judge"
+                    checked={chosen.length === selectable.length}
+                    onChange={(event) => setSelected(event.target.checked ? new Set(selectable.map((row) => row.registrationId)) : new Set())} />
+                </TableHead>
+              ) : null}
               {["Team", "Code", "Project", "Links", "Status", "Judges", "Submitted", ""].map((label) => (
                 <TableHead key={label} className="h-10 normal-case tracking-tighter">{label}</TableHead>
               ))}
@@ -142,10 +181,18 @@ function Submissions() {
           </TableHeader>
           <TableBody>
             {submissions.isPending || !stageId ? (
-              <TableRow><TableCell colSpan={8}><div className="h-5 w-full animate-pulse rounded bg-muted" /></TableCell></TableRow>
+              <TableRow><TableCell colSpan={columns}><div className="h-5 w-full animate-pulse rounded bg-muted" /></TableCell></TableRow>
             ) : visible.length ? visible.map((row) => (
               <Fragment key={row.registrationId}>
-                <TableRow>
+                <TableRow data-state={selected.has(row.registrationId) && row.canAssign ? "selected" : undefined}>
+                  {selectable.length ? (
+                    <TableCell className="w-8">
+                      {row.canAssign ? (
+                        <input type="checkbox" aria-label={`Select ${row.teamName}`} checked={selected.has(row.registrationId)}
+                          onChange={(event) => toggle(row.registrationId, event.target.checked)} />
+                      ) : null}
+                    </TableCell>
+                  ) : null}
                   <TableCell className="font-medium">{row.teamName}<p className="text-xs text-muted-foreground">{row.teamId}</p></TableCell>
                   <TableCell className="font-mono text-xs">{row.anonymousCode ?? "—"}</TableCell>
                   <TableCell>
@@ -213,7 +260,7 @@ function Submissions() {
                 </TableRow>
                 {expanded === row.registrationId ? (
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
-                    <TableCell colSpan={8} className="whitespace-normal p-4">
+                    <TableCell colSpan={columns} className="whitespace-normal p-4">
                       <div className="flex flex-wrap items-start justify-between gap-4">
                         <p className="max-w-3xl whitespace-pre-wrap text-sm">{row.description || "No description provided."}</p>
                         {row.submissionStatus === "SUBMITTED" && row.submissionId && canAssign ? (
@@ -240,11 +287,95 @@ function Submissions() {
                 ) : null}
               </Fragment>
             )) : (
-              <TableRow><TableCell colSpan={8} className="h-24 text-center text-muted-foreground">No submissions match this filter.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={columns} className="h-24 text-center text-muted-foreground">No submissions match this filter.</TableCell></TableRow>
             )}
           </TableBody>
         </Table>
       </Panel>
+    </div>
+  )
+}
+
+function matches(row: Submission, needle: string) {
+  return [row.teamName, row.teamId, row.anonymousCode ?? "", row.projectName].some((value) => value.toLowerCase().includes(needle))
+}
+
+type BulkMode = "ADD" | "SPREAD" | "REMOVE"
+type BulkResult = { mode: BulkMode; changed: number; teams: number; skipped: { registration_id: string; team_name: string | null; reason: string }[] }
+
+const BULK_MODES: Record<BulkMode, { label: string; hint: string }> = {
+  ADD: { label: "Add these judges to each", hint: "Every picked judge goes on every selected team." },
+  SPREAD: { label: "Spread evenly", hint: "Each team gets N judges from the picked pool, least busy first." },
+  REMOVE: { label: "Remove these judges", hint: "Takes the picked judges off; submitted scorecards are kept and skipped." },
+}
+
+/** Assign or remove judges on every ticked submission in one request. */
+function BulkAssignBar({ roundId, roundName, registrationIds, judges, onDone }: {
+  roundId: string
+  roundName: string
+  registrationIds: string[]
+  judges: { email: string; display_name: string; assignments: number }[]
+  onDone: () => void
+}) {
+  const [mode, setMode] = useState<BulkMode>("ADD")
+  const [picked, setPicked] = useState<string[]>([])
+  const [perTeam, setPerTeam] = useState(1)
+  const bulk = useAdminMutation<{ registration_ids: string[]; judge_emails: string[]; mode: BulkMode; per_team: number }, BulkResult>(
+    (body) => ({ path: `/api/admin/rounds/${roundId}/assignments/bulk`, body }), [["submissions"], ["evaluators"], ["board"], ["rounds"]]
+  )
+  const tooFew = mode === "SPREAD" && picked.length < perTeam
+
+  function apply() {
+    bulk.mutateAsync({ registration_ids: registrationIds, judge_emails: picked, mode, per_team: perTeam })
+      .then((result) => {
+        const verb = result.mode === "REMOVE" ? "Removed" : "Added"
+        const summary = `${verb} ${result.changed} judge slot${result.changed === 1 ? "" : "s"} across ${result.teams} team${result.teams === 1 ? "" : "s"}${result.skipped.length ? `, ${result.skipped.length} skipped` : ""}.`
+        if (result.skipped.length) {
+          const details = result.skipped.slice(0, 6).map((row) => `${row.team_name ?? "Unknown"}: ${row.reason}`).join("; ")
+          toast.warning(summary, { description: details + (result.skipped.length > 6 ? `; and ${result.skipped.length - 6} more` : ""), duration: 12_000 })
+        } else {
+          toast.success(summary)
+        }
+        setPicked([])
+        onDone()
+      })
+      .catch((error: unknown) => toast.error(errorMessage(error, "The bulk assignment failed.")))
+  }
+
+  return (
+    <div role="region" aria-label="Bulk judge assignment" className="mb-3 grid gap-3 rounded-lg bg-muted/60 p-3 text-sm">
+      <div className="flex flex-wrap items-end gap-2">
+        <span className="font-medium">{registrationIds.length} selected · {roundName}</span>
+        <Field label="Action">
+          <Select value={mode} onChange={(event) => setMode(event.target.value as BulkMode)}>
+            {(Object.keys(BULK_MODES) as BulkMode[]).map((key) => <option key={key} value={key}>{BULK_MODES[key].label}</option>)}
+          </Select>
+        </Field>
+        {mode === "SPREAD" ? (
+          <Field label="Judges per team">
+            <TextInput type="number" min={1} max={10} value={perTeam} onChange={(event) => setPerTeam(Math.max(1, Math.min(10, Number(event.target.value) || 1)))} className="w-20" />
+          </Field>
+        ) : null}
+        <Button tone="green" disabled={!picked.length || tooFew || bulk.isPending} onClick={apply}>
+          {bulk.isPending ? "Working…" : "Apply"}
+        </Button>
+        <button type="button" className="text-xs underline underline-offset-2" onClick={onDone}>Clear</button>
+      </div>
+      <p className="text-xs text-muted-foreground">{BULK_MODES[mode].hint}{tooFew ? ` Pick at least ${perTeam} judges.` : ""}</p>
+      <fieldset className="flex flex-wrap gap-1.5">
+        <legend className="sr-only">Judges</legend>
+        {judges.map((judge) => {
+          const on = picked.includes(judge.email)
+          return (
+            <label key={judge.email} className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${on ? "border-emerald-500 bg-emerald-500/10" : "border-border bg-card"}`}>
+              <input type="checkbox" className="sr-only" checked={on}
+                onChange={(event) => setPicked((current) => event.target.checked ? [...current, judge.email] : current.filter((email) => email !== judge.email))} />
+              {judge.display_name}<span className="text-muted-foreground">({judge.assignments})</span>
+            </label>
+          )
+        })}
+        {!judges.length ? <span className="text-xs text-muted-foreground">No active judges yet. Invite them under Settings.</span> : null}
+      </fieldset>
     </div>
   )
 }

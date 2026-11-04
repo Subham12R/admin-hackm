@@ -4,24 +4,29 @@ import { useEffect, useRef, useState } from "react"
 import { Bold, Heading2, Image as ImageIcon, Italic, Link2, List, ListOrdered, Minus, Quote, Table2 } from "lucide-react"
 
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ToField, takeHandedTeams, useResolved, type Audience, type ExtraRecipient, type Scope, type Segment } from "@/components/admin/to-field"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { sendToStorage, type SignedUpload } from "@/lib/storage-upload"
 
-type Audience = "LEADERS" | "MEMBERS" | "FINALIST_LEADERS" | "FINALIST_MEMBERS"
 type SenderKey = "announcements" | "support" | "noreply"
-type Draft = {
+type Draft = Audience & {
   subject: string
   body_markdown: string
-  audience: Audience
   show_banner: boolean
   banner_url: string
   cta_label: string
   cta_url: string
   sender: SenderKey
 }
-type Campaign = Draft & {
+type Delivery = { PENDING: number; SENT: number; FAILED: number }
+type Campaign = Omit<Draft, "audience"> & {
+  /** The old fixed audience key when one fits; `segment` is the real value. */
+  audience: string
+  segment?: string
+  delivery?: Delivery | null
   from?: string
   id: string
   status: "DRAFT" | "SENT"
@@ -33,23 +38,22 @@ type Campaign = Draft & {
 }
 type Campaigns = {
   items: Campaign[]
-  audiences: Record<Audience, number>
+  segments?: Segment[]
+  max_recipients?: number
   uploads: boolean
   placeholders: string[]
   senders?: { key: SenderKey; address: string; from: string }[]
 }
 
 const AREA = [keys.emailCampaigns]
-const AUDIENCES: Record<Audience, string> = {
-  LEADERS: "Team leaders",
-  MEMBERS: "Every team member",
-  FINALIST_LEADERS: "Finalist team leaders",
-  FINALIST_MEMBERS: "Every finalist member",
-}
 const EMPTY: Draft = {
   subject: "",
   body_markdown: "Hi {{first_name}},\n\nWrite your update here. **Bold**, *italic*, [links](https://hackmatrix.codes), lists and images all work.\n",
-  audience: "LEADERS",
+  audience: "PAID",
+  audience_scope: "LEADERS",
+  segment_stage_id: null,
+  team_ids: [],
+  extra_recipients: [],
   show_banner: true,
   banner_url: "",
   cta_label: "",
@@ -79,8 +83,24 @@ const IMAGE_TYPES = ["image/gif", "image/jpeg", "image/png"]
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 function draftOf(campaign: Campaign): Draft {
-  const { subject, body_markdown, audience, show_banner, banner_url, cta_label, cta_url } = campaign
-  return { subject, body_markdown, audience, show_banner, banner_url, cta_label, cta_url, sender: campaign.sender ?? "announcements" }
+  const { subject, body_markdown, show_banner, banner_url, cta_label, cta_url } = campaign
+  return {
+    subject, body_markdown, show_banner, banner_url, cta_label, cta_url, sender: campaign.sender ?? "announcements",
+    audience: campaign.segment ?? "PAID",
+    audience_scope: (campaign.audience_scope ?? "LEADERS") as Scope,
+    segment_stage_id: campaign.segment_stage_id ?? null,
+    team_ids: campaign.team_ids ?? [],
+    extra_recipients: (campaign.extra_recipients ?? []).map((item: ExtraRecipient) => ({ ...item, name: item.name ?? "", team_name: item.team_name ?? "" })),
+  }
+}
+
+function segmentLabel(campaigns: Campaigns, campaign: Campaign) {
+  const segment = campaigns.segments?.find((item) => item.key === campaign.segment)
+  const parts = []
+  if (segment && segment.key !== "NONE") parts.push(`${segment.label} (${campaign.audience_scope === "MEMBERS" ? "all members" : "leaders"})`)
+  if (campaign.team_ids?.length) parts.push(`${campaign.team_ids.length} picked team${campaign.team_ids.length === 1 ? "" : "s"}`)
+  if (campaign.extra_recipients?.length) parts.push(`${campaign.extra_recipients.length} added`)
+  return parts.join(" + ") || "Nobody yet"
 }
 
 /** Upload an email image (GIF/JPEG/PNG) straight to storage and return its public URL. */
@@ -93,14 +113,24 @@ async function uploadImage(file: File) {
 }
 
 export default function EmailsPage() {
-  const me = useMe()
-  const canWrite = can.eventControl(me.data?.user.roles ?? [])
+  const canWrite = can.eventControl(useRoles())
   const campaigns = useAdminQuery<Campaigns>(keys.emailCampaigns, "/api/admin/email-campaigns")
   // `session` keys the composer: saving a new draft assigns an id but must not remount (and reset) the editor.
   const [editing, setEditing] = useState<{ session: number; id: string | null; draft: Draft } | null>(null)
   const open = (id: string | null, draft: Draft) => setEditing({ session: Date.now(), id, draft })
   const remove = useAdminMutation<string>((id) => ({ path: `/api/admin/email-campaigns/${id}`, method: "DELETE" }), AREA)
+  const [report, setReport] = useState<string | null>(null)
   const data = campaigns.data
+
+  // "Email selected" on Teams / Registrations lands here with the picked teams in the To field.
+  useEffect(() => {
+    if (!canWrite || !new URLSearchParams(window.location.search).has("compose")) return
+    const handed = takeHandedTeams()
+    window.history.replaceState(window.history.state, "", "/dashboard/emails")
+    if (!handed?.ids.length) return
+    const timer = window.setTimeout(() => setEditing({ session: Date.now(), id: null, draft: { ...EMPTY, subject: "", audience: "NONE", audience_scope: handed.scope, team_ids: handed.ids } }), 0)
+    return () => window.clearTimeout(timer)
+  }, [canWrite])
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
@@ -124,15 +154,21 @@ export default function EmailsPage() {
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     <span className="truncate">{item.subject}</span>
                     <StatusBadge status={item.status} />
-                    <Badge>{AUDIENCES[item.audience]}</Badge>
+                    <Badge>{segmentLabel(data, item)}</Badge>
                     {item.from ? <Badge>from {item.from}</Badge> : null}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {item.sent_at
                       ? `Sent ${dateTime(item.sent_at)} to ${item.recipient_count} ${item.recipient_count === 1 ? "person" : "people"}${item.sent_by ? ` by ${item.sent_by}` : ""}`
                       : `Drafted ${dateTime(item.created_at)}${item.created_by ? ` by ${item.created_by}` : ""}`}
+                    {item.delivery ? <DeliveryLine delivery={item.delivery} /> : null}
                   </p>
                 </div>
+                {item.status === "SENT" ? (
+                  <Button onClick={() => setReport((current) => current === item.id ? null : item.id)} aria-expanded={report === item.id}>
+                    {report === item.id ? "Hide report" : "Report"}
+                  </Button>
+                ) : null}
                 {canWrite ? (
                   <div className="flex flex-wrap gap-1">
                     {item.status === "DRAFT" ? <Button onClick={() => open(item.id, draftOf(item))}>Edit</Button> : null}
@@ -143,6 +179,7 @@ export default function EmailsPage() {
                     </ConfirmButton>
                   </div>
                 ) : null}
+                {report === item.id ? <Report id={item.id} canRetry={canWrite} /> : null}
               </li>
             ))}
           </ul>
@@ -174,7 +211,12 @@ function Composer({ id, initial, campaigns, onSaved, onClose }: {
   const busy = create.isPending || update.isPending || test.isPending || send.isPending
   const buttonIncomplete = Boolean(draft.cta_label.trim()) !== Boolean(draft.cta_url.trim())
   const ready = draft.subject.trim().length > 0 && !buttonIncomplete
-  const recipients = campaigns.audiences[draft.audience] ?? 0
+  const resolved = useResolved({
+    audience: draft.audience, audience_scope: draft.audience_scope, segment_stage_id: draft.segment_stage_id,
+    team_ids: draft.team_ids, extra_recipients: draft.extra_recipients,
+  })
+  const recipients = resolved.data?.count ?? 0
+  const overCap = recipients > (campaigns.max_recipients ?? 2000)
   const bannerMode = !draft.show_banner ? "none" : draft.banner_url ? "custom" : "default"
 
   function set<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -238,7 +280,7 @@ function Composer({ id, initial, campaigns, onSaved, onClose }: {
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      <Panel title={id ? "Edit email" : "New email"} description={`Goes to ${recipients} ${recipients === 1 ? "person" : "people"} (${AUDIENCES[draft.audience].toLowerCase()} of paid teams).`}
+      <Panel title={id ? "Edit email" : "New email"} description={resolved.data ? `Goes to ${recipients} ${recipients === 1 ? "person" : "people"}.` : "Counting recipients…"}
         actions={<Button onClick={onClose}>Close</Button>}>
         <div className="grid gap-3">
           <Field label="Subject">
@@ -251,12 +293,16 @@ function Composer({ id, initial, campaigns, onSaved, onClose }: {
               ))}
             </Select>
           </Field>
+          <div className="flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+            <span>To</span>
+            <ToField
+              value={{ audience: draft.audience, audience_scope: draft.audience_scope, segment_stage_id: draft.segment_stage_id, team_ids: draft.team_ids, extra_recipients: draft.extra_recipients }}
+              onChange={(next) => setDraft((current) => ({ ...current, ...next }))}
+              segments={campaigns.segments ?? []}
+              resolved={resolved}
+            />
+          </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Send to">
-              <Select value={draft.audience} onChange={(event) => set("audience", event.target.value as Audience)}>
-                {(Object.keys(AUDIENCES) as Audience[]).map((key) => <option key={key} value={key}>{AUDIENCES[key]} ({campaigns.audiences[key] ?? 0})</option>)}
-              </Select>
-            </Field>
             <Field label="Banner">
               <Select value={bannerMode} onChange={(event) => {
                 const mode = event.target.value
@@ -321,7 +367,7 @@ function Composer({ id, initial, campaigns, onSaved, onClose }: {
             <Button disabled={!ready || busy} onClick={() => void notify(save().then((campaignId) => test.mutateAsync(campaignId)).then((result) => { toast.success(`Test sent to ${result.sent_to}.`) }), "Draft saved.")}>
               {test.isPending ? "Sending test…" : "Send test to me"}
             </Button>
-            <ConfirmButton tone="green" confirmLabel={`Send to ${recipients} now`} disabled={!ready || busy || recipients === 0}
+            <ConfirmButton tone="green" confirmLabel={`Send to ${recipients} ${recipients === 1 ? "person" : "people"} now`} disabled={!ready || busy || recipients === 0 || overCap || !resolved.data}
               onConfirm={() => void notify(save().then((campaignId) => send.mutateAsync(campaignId)), `Email queued for ${recipients} ${recipients === 1 ? "person" : "people"}.`, onClose)}>
               Send…
             </ConfirmButton>
@@ -374,4 +420,75 @@ function usePreview(draft: Draft) {
   }, [payload])
 
   return state
+}
+
+function DeliveryLine({ delivery }: { delivery: Delivery }) {
+  return (
+    <span className="ml-1">
+      · {delivery.SENT} delivered{delivery.PENDING ? `, ${delivery.PENDING} sending` : ""}
+      {delivery.FAILED ? <span className="text-red-600">, {delivery.FAILED} failed</span> : null}
+    </span>
+  )
+}
+
+type ReportData = {
+  counts: Delivery
+  recipients: { email: string; name: string; team_name: string; source: string; status: string; error: string | null; attempts: number; sent_at: string | null }[]
+}
+
+/** Who a sent email went to and how each delivery went; failed ones can be sent again. */
+function Report({ id, canRetry }: { id: string; canRetry: boolean }) {
+  const report = useAdminQuery<ReportData>(["email-report", id], `/api/admin/email-campaigns/${id}/report`, { refetchInterval: 10_000 })
+  const retry = useAdminMutation<void, { retried: number }>(() => ({ path: `/api/admin/email-campaigns/${id}/retry-failed` }), [AREA[0], ["email-report", id]])
+  const [only, setOnly] = useState<"all" | "FAILED" | "PENDING">("all")
+  const data = report.data
+  const rows = (data?.recipients ?? []).filter((row) => only === "all" || row.status === only)
+
+  return (
+    <div className="mt-2 w-full rounded-lg bg-muted/40 p-3">
+      {report.isError ? <Notice tone="red">{errorMessage(report.error, "The report could not be loaded.")}</Notice> : null}
+      {!data ? <LoadingRows rows={3} /> : (
+        <>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
+            <Badge tone="green">{data.counts.SENT} delivered</Badge>
+            {data.counts.PENDING ? <Badge tone="amber">{data.counts.PENDING} sending</Badge> : null}
+            {data.counts.FAILED ? <Badge tone="red">{data.counts.FAILED} failed</Badge> : null}
+            <Select aria-label="Show" value={only} onChange={(event) => setOnly(event.target.value as typeof only)} className="ml-auto h-7 w-auto text-xs">
+              <option value="all">Everyone</option>
+              <option value="FAILED">Failed</option>
+              <option value="PENDING">Still sending</option>
+            </Select>
+            {canRetry && data.counts.FAILED ? (
+              <Button tone="amber" disabled={retry.isPending}
+                onClick={() => void notify(retry.mutateAsync().then((result) => { toast.success(`Sending ${result.retried} again.`) }), "Retry queued.")}>
+                Retry {data.counts.FAILED} failed
+              </Button>
+            ) : null}
+          </div>
+          <div className="max-h-80 overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {["Person", "Team", "Added as", "Status", "Detail"].map((label) => <TableHead key={label} className="h-8 normal-case tracking-tighter">{label}</TableHead>)}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row) => (
+                  <TableRow key={row.email}>
+                    <TableCell className="text-xs">{row.name}<p className="text-muted-foreground">{row.email}</p></TableCell>
+                    <TableCell className="text-xs">{row.team_name || "—"}</TableCell>
+                    <TableCell className="text-xs">{row.source === "SEGMENT" ? "Segment" : row.source === "TEAM" ? "Picked team" : "Added"}</TableCell>
+                    <TableCell><StatusBadge status={row.status} label={row.status === "SENT" ? "Delivered" : row.status === "PENDING" ? "Sending" : "Failed"} /></TableCell>
+                    <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={row.error ?? undefined}>
+                      {row.error ?? (row.sent_at ? dateTime(row.sent_at) : "")}{row.attempts > 1 ? ` · ${row.attempts} tries` : ""}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
+      )}
+    </div>
+  )
 }

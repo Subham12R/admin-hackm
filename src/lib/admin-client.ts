@@ -190,6 +190,7 @@ export const evaluationsSchema = z.object({
       team_id: z.string(),
       team_name: z.string(),
       registration_id: z.string(),
+      anonymous_code: z.string().nullable().optional(),
       round: z.string(),
       round_id: z.string(),
       scores: z.record(z.string(), z.number()),
@@ -324,6 +325,7 @@ export type Evaluation = {
   teamId: string
   teamName: string
   registrationId: string
+  anonymousCode: string | null
   round: string
   roundId: string
   scores: Record<string, number>
@@ -464,6 +466,7 @@ export function toEvaluations(data: z.infer<typeof evaluationsSchema>): Evaluati
     teamId: evaluation.team_id,
     teamName: evaluation.team_name,
     registrationId: evaluation.registration_id,
+    anonymousCode: evaluation.anonymous_code ?? null,
     round: evaluation.round,
     roundId: evaluation.round_id,
     scores: evaluation.scores,

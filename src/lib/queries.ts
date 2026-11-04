@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
+import { useHydrated } from "@/hooks/use-hydrated"
 
 /**
  * Query keys are namespaced so a mutation can invalidate everything it affects.
@@ -33,6 +34,9 @@ export const keys = {
   staff: ["staff"] as const,
   teamInvites: ["team-invites"] as const,
   emailCampaigns: ["email-campaigns"] as const,
+  exportDatasets: ["export-datasets"] as const,
+  exports: ["exports"] as const,
+  exportJob: (id: string) => ["exports", id] as const,
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,
@@ -41,9 +45,11 @@ export const keys = {
   candidates: (body: string) => ["candidates", body] as const,
   credentials: (params: string) => ["credentials", params] as const,
   judgeAssignment: (id: string) => ["judge-assignment", id] as const,
+  attention: ["attention"] as const,
 }
 
-const AGGREGATES: QueryKey[] = [["overview"], ["analytics"], ["logs"]]
+// The sidebar pills refresh after every write too, so a count drops as soon as you clear an item.
+const AGGREGATES: QueryKey[] = [["overview"], ["analytics"], ["logs"], ["attention"]]
 
 export function useAdminQuery<T>(key: QueryKey, path: string | null, options?: { refetchInterval?: number; enabled?: boolean }) {
   return useQuery({
@@ -76,6 +82,17 @@ export function useMe() {
   return useAdminQuery<Me>(keys.me, "/api/auth/me")
 }
 
+/**
+ * The signed-in user's roles, empty until hydration finishes. Use it for role-gated table
+ * columns and toolbar buttons: the user often loads (via the sidebar) while a page is still
+ * hydrating, and rendering by role then would not match the server's HTML.
+ */
+export function useRoles() {
+  const roles = useMe().data?.user.roles
+  return useHydrated() && roles ? roles : NO_ROLES
+}
+const NO_ROLES: string[] = []
+
 const STAFF_READ = ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "EVALUATION_ADMIN", "SUPPORT_ADMIN", "VIEWER"]
 
 export const can = {
@@ -88,4 +105,22 @@ export const can = {
   superAdmin: (roles: string[]) => roles.includes("SUPER_ADMIN"),
   judge: (roles: string[]) => roles.includes("JUDGE"),
   checkin: (roles: string[]) => roles.some((role) => ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "SUPPORT_ADMIN"].includes(role)),
+}
+
+/** Work waiting on staff, per sidebar item; the backend only returns counts the caller's roles can act on. */
+export type AttentionCounts = Partial<Record<
+  "teams_review" | "acm_pending" | "payments_review" | "contacts_new" | "submissions_unassigned" | "my_assignments",
+  number
+>>
+
+export function useAttention(enabled: boolean) {
+  const query = useQuery({
+    queryKey: keys.attention,
+    queryFn: ({ signal }) => api<{ counts: AttentionCounts }>("/api/admin/attention", { signal }),
+    enabled,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  })
+  return query.data?.counts ?? {}
 }

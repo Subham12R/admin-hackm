@@ -15,10 +15,14 @@ import { toast } from "sonner"
 
 import { Badge, ConfirmButton, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
+import { SearchBox } from "@/components/admin/search-box"
+import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
+import { ExportCsv } from "@/components/admin/export-csv"
+import { useTableSearch } from "@/hooks/use-table-search"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
 import { rupees } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import {
   adminQuery,
   registrationCategories,
@@ -145,15 +149,18 @@ const statusFilters = [
 ]
 
 export default function RegistrationsPage() {
-  const roles = useMe().data?.user.roles ?? []
+  const roles = useRoles()
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [status, setStatus] = useState("")
-  const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
+  const search = useTableSearch(() => setPage(1))
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   // Super admins can tick rows on the current page and cancel or delete them in one go.
   const bulkAllowed = can.money(roles)
+  // Event Control can tick rows too, to email them.
+  const canEmail = can.eventControl(roles)
+  const selectable = bulkAllowed || canEmail
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const bulk = useAdminMutation<{ action: BulkAction; ids: string[] }, BulkResult>(
     (body) => ({ path: "/api/admin/registrations/bulk", body }), [["registrations"], ["registration"], ["teams"]]
@@ -167,7 +174,7 @@ export default function RegistrationsPage() {
   if (date) params.set("date", format(date, "yyyy-MM-dd"))
   if (category !== "all") params.set("category", category)
   if (status) params.set("status", status)
-  if (search.trim()) params.set("search", search.trim())
+  if (search.term) params.set("search", search.term)
   const query = useQuery({
     queryKey: keys.registrations(params.toString()),
     queryFn: adminQuery(`/api/admin/registrations?${params}`, registrationsPageSchema),
@@ -182,7 +189,7 @@ export default function RegistrationsPage() {
   const chartData = data?.dailyCounts ?? []
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all" || Boolean(status) || Boolean(search)
+  const hasFilters = Boolean(date) || category !== "all" || Boolean(status) || Boolean(search.term)
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -219,7 +226,7 @@ export default function RegistrationsPage() {
     setDate(undefined)
     setCategory("all")
     setStatus("")
-    setSearch("")
+    search.setValue("")
     resetPage()
   }
 
@@ -304,15 +311,7 @@ export default function RegistrationsPage() {
               </p>
             </div>
             <div className="grid w-full grid-cols-2 items-end gap-2 sm:flex sm:w-auto sm:flex-wrap">
-              <label className="col-span-2 flex min-w-0 flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
-                Search
-                <input
-                  value={search}
-                  onChange={(event) => { setSearch(event.target.value); resetPage() }}
-                  placeholder="Team or leader email"
-                  className="h-8 w-full rounded-md sm:w-48 border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </label>
+              <SearchBox className="col-span-2" value={search.value} onChange={search.setValue} placeholder="Team, leader email or HM- code" />
               <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 Status
                 <select
@@ -412,6 +411,9 @@ export default function RegistrationsPage() {
                   </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
+              <ExportCsv datasets={["registrations", "members"]} selectedIds={chosen} ignored={date ? "The date filter is not applied to exports." : undefined}
+                filters={{ search: search.term || undefined, status: status || undefined, category: category !== "all" ? category : undefined }} />
               <RichButton
                 type="button"
                 color="zinc"
@@ -454,13 +456,18 @@ export default function RegistrationsPage() {
               <li className="py-8 text-center text-sm text-muted-foreground">{loadError || "No registrations match these filters."}</li>
             ) : null}
           </ul>
-          {bulkAllowed && chosen.length ? (
+          {selectable && chosen.length ? (
             <div role="region" aria-label="Bulk actions" className="mb-3 hidden flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm md:flex">
               <span className="font-medium">{chosen.length} selected</span>
-              <ConfirmButton confirmLabel={`Cancel ${chosen.length} unpaid`} disabled={bulk.isPending} onConfirm={() => runBulk("cancel")}>Cancel unpaid</ConfirmButton>
-              <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete abandoned / rejected</ConfirmButton>
+              {canEmail ? <EmailSelected ids={chosen} /> : null}
+              {bulkAllowed ? (
+                <>
+                  <ConfirmButton confirmLabel={`Cancel ${chosen.length} unpaid`} disabled={bulk.isPending} onConfirm={() => runBulk("cancel")}>Cancel unpaid</ConfirmButton>
+                  <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete abandoned / rejected</ConfirmButton>
+                </>
+              ) : null}
               <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
-              <span className="text-xs text-muted-foreground">Teams that do not fit an action (e.g. paid, or with a payment on record) are skipped and listed.</span>
+              {bulkAllowed ? <span className="text-xs text-muted-foreground">Teams that do not fit an action (e.g. paid, or with a payment on record) are skipped and listed.</span> : null}
             </div>
           ) : null}
           <div className="hidden md:block">
@@ -470,7 +477,7 @@ export default function RegistrationsPage() {
             </TableCaption>
             <TableHeader>
               <TableRow>
-                {bulkAllowed ? (
+                {selectable ? (
                   <TableHead className="h-10 w-8">
                     <input type="checkbox" aria-label="Select all on this page" checked={allChosen}
                       onChange={(event) => setSelected(event.target.checked ? new Set(visibleRegistrations.map((registration) => registration.registrationId)) : new Set())} />
@@ -497,7 +504,7 @@ export default function RegistrationsPage() {
                     className="cursor-pointer"
                     aria-label={`Open ${registration.teamName}`}
                   >
-                    {bulkAllowed ? (
+                    {selectable ? (
                       <TableCell className="w-8" onClick={(event) => event.stopPropagation()}>
                         <input type="checkbox" aria-label={`Select ${registration.teamName}`} checked={selected.has(registration.registrationId)}
                           onChange={(event) => toggle(registration.registrationId, event.target.checked)} />
@@ -513,7 +520,7 @@ export default function RegistrationsPage() {
               ) : (
                 <TableRow>
                   <TableCell
-                    colSpan={visibleColumns.length + (bulkAllowed ? 1 : 0)}
+                    colSpan={visibleColumns.length + (selectable ? 1 : 0)}
                     className="h-24 text-center text-muted-foreground"
                   >
                     {loadError || "No registrations match these filters."}

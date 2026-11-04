@@ -6,7 +6,7 @@ import { useState } from "react"
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
 import { dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { notify } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 
 type Importance = "INFO" | "IMPORTANT" | "URGENT"
 type SiteNotice = {
@@ -52,8 +52,7 @@ function bodyOf(draft: Draft) {
 }
 
 export default function SiteStripPage() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const list = useAdminQuery<Listing>(keys.siteNotices, "/api/admin/site-notices", { refetchInterval: 60_000 })
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null)
   const create = useAdminMutation<ReturnType<typeof bodyOf>>((body) => ({ path: "/api/admin/site-notices", body }), AREA)

@@ -5,7 +5,7 @@ import { useState } from "react"
 import { Badge, Button, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 type Announcement = {
@@ -28,8 +28,7 @@ const EMPTY: Draft = { title: "", body: "", level: "INFO", email_leaders: false 
 const AREA = [["announcements"]]
 
 export default function AnnouncementsPage() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const list = useAdminQuery<{ items: Announcement[] }>(keys.announcements, "/api/admin/announcements", { refetchInterval: 60_000 })
   const [editing, setEditing] = useState<{ id: string | null; draft: Draft } | null>(null)
   const create = useAdminMutation<Draft>((body) => ({ path: "/api/admin/announcements", body }), AREA)

@@ -7,7 +7,7 @@ import { Bones } from "@/components/admin/bones"
 import { FlushPanel } from "@/components/admin/flush-panel"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { api, dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useMe, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 type StaffMember = { id: string; email: string; display_name: string; status: string; roles: string[]; owner?: boolean }
@@ -26,7 +26,7 @@ const ROLE_HELP: Record<string, string> = {
 
 export default function SettingsPage() {
   const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="Settings" description="Your account, and staff access for super admins." />

@@ -7,7 +7,7 @@ import { Button, Field, Notice, PageHeader, Panel, StatusBadge, TextInput } from
 import { Bones } from "@/components/admin/bones"
 import { DiscountPanel, type DiscountConfig } from "@/components/admin/discount-panel"
 import { dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 type Window = { opens_at: string | null; closes_at: string | null; state: "OPEN" | "NOT_OPEN" | "CLOSED" }
@@ -55,8 +55,7 @@ function fromConfig(config: EventConfig): Record<FieldKey, string> {
 }
 
 export default function EventControlPage() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const event = useAdminQuery<EventConfig>(keys.event, "/api/admin/event", { refetchInterval: 60_000 })
   const [generation, setGeneration] = useState(0)
 

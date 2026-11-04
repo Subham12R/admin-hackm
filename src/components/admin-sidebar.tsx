@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Moon,
   ScrollText,
+  FileDown,
   Settings,
   SlidersHorizontal,
   Sun,
@@ -124,6 +125,7 @@ const navigation: NavigationGroup[] = [
     label: "Operations",
     items: [
       { title: "Event Control", href: "/dashboard/event-control", icon: SlidersHorizontal, access: can.read },
+      { title: "Exports", href: "/dashboard/exports", icon: FileDown, access: can.eventControl },
       { title: "Audit Logs", href: "/dashboard/logs", icon: ScrollText, access: can.read },
     ],
   },

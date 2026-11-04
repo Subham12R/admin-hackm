@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToField, takeHandedTeams, useResolved, type Audience, type ExtraRecipient, type Scope, type Segment } from "@/components/admin/to-field"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { sendToStorage, type SignedUpload } from "@/lib/storage-upload"
 
 type SenderKey = "announcements" | "support" | "noreply"
@@ -113,8 +113,7 @@ async function uploadImage(file: File) {
 }
 
 export default function EmailsPage() {
-  const me = useMe()
-  const canWrite = can.eventControl(me.data?.user.roles ?? [])
+  const canWrite = can.eventControl(useRoles())
   const campaigns = useAdminQuery<Campaigns>(keys.emailCampaigns, "/api/admin/email-campaigns")
   // `session` keys the composer: saving a new draft assigns an id but must not remount (and reset) the editor.
   const [editing, setEditing] = useState<{ session: number; id: string | null; draft: Draft } | null>(null)

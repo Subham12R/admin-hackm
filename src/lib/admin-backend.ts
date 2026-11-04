@@ -174,6 +174,14 @@ async function refreshTokens(backend: string, refresh: string): Promise<Tokens |
 
 async function relay(response: Response) {
   if (response.status === 204) return new NextResponse(null, { status: 204 })
+  // CSV downloads pass through as files; everything else is JSON.
+  const type = response.headers.get("content-type") ?? ""
+  if (response.ok && type.startsWith("text/csv")) {
+    const headers = new Headers({ "content-type": type, "cache-control": "no-store" })
+    const disposition = response.headers.get("content-disposition")
+    if (disposition) headers.set("content-disposition", disposition)
+    return new NextResponse(await response.arrayBuffer(), { status: response.status, headers })
+  }
   const text = await response.text()
   try {
     const data = text ? JSON.parse(text) : null

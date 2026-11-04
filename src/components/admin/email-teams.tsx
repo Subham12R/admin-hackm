@@ -6,6 +6,7 @@ import { Mail } from "lucide-react"
 
 import { Button } from "@/components/admin/kit"
 import { handTeamsToEmail } from "@/components/admin/to-field"
+import { useHydrated } from "@/hooks/use-hydrated"
 import { api, errorMessage } from "@/lib/api"
 import { toast } from "@/lib/notify"
 
@@ -16,6 +17,7 @@ import { toast } from "@/lib/notify"
 export function EmailMatching({ filters, total }: { filters: URLSearchParams; total: number }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
+  const hydrated = useHydrated()
 
   async function go() {
     setBusy(true)
@@ -37,6 +39,8 @@ export function EmailMatching({ filters, total }: { filters: URLSearchParams; to
     }
   }
 
+  // Pages show this by role; wait for hydration so the first render matches the server's HTML.
+  if (!hydrated) return null
   return (
     <Button disabled={busy || total === 0} onClick={() => void go()} title="Open a new email with every matching team in the To field">
       <Mail className="mr-1 inline size-3.5" aria-hidden="true" />{busy ? "Loading…" : `Email ${total} matching`}

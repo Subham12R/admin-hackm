@@ -10,10 +10,11 @@ import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, P
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { adminQuery, evaluatorsSchema, submissionsSchema, toSubmissions, type Submission } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import { notify, toast } from "@/lib/notify"
 import { SearchBox } from "@/components/admin/search-box"
 import { useTableSearch } from "@/hooks/use-table-search"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { PLACEMENTS, useStages } from "@/lib/stages"
 
 const statusTone = { Draft: "zinc", Submitted: "amber", Evaluated: "green" } as const
@@ -29,8 +30,7 @@ export default function SubmissionsPage() {
 }
 
 function Submissions() {
-  const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   const canAssign = can.assign(roles)
   const router = useRouter()
   const pathname = usePathname()
@@ -118,6 +118,9 @@ function Submissions() {
                 {tracks.length > 1 ? <option value="none">Not chosen yet</option> : null}
               </Select>
             </Field>
+            <ExportCsv datasets={["submissions"]} selectedIds={chosen}
+              filters={{ stage_id: stageId || undefined, track_id: trackId || undefined, search: search.term || undefined }}
+              ignored={unchosen ? "\"Not chosen yet\" is not applied; the export covers every problem statement." : undefined} />
           </div>
         }
       />

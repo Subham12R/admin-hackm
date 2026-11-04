@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
+import { useHydrated } from "@/hooks/use-hydrated"
 
 /**
  * Query keys are namespaced so a mutation can invalidate everything it affects.
@@ -33,6 +34,9 @@ export const keys = {
   staff: ["staff"] as const,
   teamInvites: ["team-invites"] as const,
   emailCampaigns: ["email-campaigns"] as const,
+  exportDatasets: ["export-datasets"] as const,
+  exports: ["exports"] as const,
+  exportJob: (id: string) => ["exports", id] as const,
   judgeAssignments: ["judge-assignments"] as const,
   checkins: (search: string) => ["checkins", search] as const,
   gallery: ["gallery"] as const,
@@ -77,6 +81,17 @@ export type Me = { user: { id: string; email: string; display_name: string; role
 export function useMe() {
   return useAdminQuery<Me>(keys.me, "/api/auth/me")
 }
+
+/**
+ * The signed-in user's roles, empty until hydration finishes. Use it for role-gated table
+ * columns and toolbar buttons: the user often loads (via the sidebar) while a page is still
+ * hydrating, and rendering by role then would not match the server's HTML.
+ */
+export function useRoles() {
+  const roles = useMe().data?.user.roles
+  return useHydrated() && roles ? roles : NO_ROLES
+}
+const NO_ROLES: string[] = []
 
 const STAFF_READ = ["SUPER_ADMIN", "EVENT_ADMIN", "REGISTRATION_ADMIN", "EVALUATION_ADMIN", "SUPPORT_ADMIN", "VIEWER"]
 

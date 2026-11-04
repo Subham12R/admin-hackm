@@ -15,11 +15,12 @@ import { RichButton } from "@/components/rich-button"
 import { Badge, RegistrationBadge, StatusBadge } from "@/components/admin/kit"
 import { SearchBox } from "@/components/admin/search-box"
 import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { FinalsDecisions } from "@/components/admin/finals-decisions"
 import { rupees } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 import {
   adminQuery,
@@ -132,9 +133,9 @@ function TrackList({ tracks }: { tracks: Registration["tracks"] }) {
 const FINALS_LABELS: Record<TeamFinals["status"], string> = { PENDING: "not decided", ACCEPTED: "accepted", DECLINED: "not selected" }
 
 export default function TeamsPage() {
-  const me = useMe()
-  const canReview = can.review(me.data?.user.roles ?? [])
-  const canEmail = can.eventControl(me.data?.user.roles ?? [])
+  const roles = useRoles()
+  const canReview = can.review(roles)
+  const canEmail = can.eventControl(roles)
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
@@ -396,6 +397,8 @@ export default function TeamsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
               {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
+              <ExportCsv datasets={["teams", "members"]} selectedIds={chosen} ignored={date ? "The date filter is not applied to exports." : undefined}
+                filters={{ search: search.term || undefined, category: category !== "all" ? category : undefined, finals: finals !== "all" ? finals : undefined }} />
               <RichButton
                 type="button"
                 color="zinc"

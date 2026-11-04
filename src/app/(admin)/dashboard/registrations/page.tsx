@@ -17,11 +17,12 @@ import { Badge, ConfirmButton, RegistrationBadge } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
 import { SearchBox } from "@/components/admin/search-box"
 import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { TeamInvites } from "@/components/admin/team-invites"
 import { rupees } from "@/lib/api"
-import { can, keys, useAdminMutation, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import {
   adminQuery,
   registrationCategories,
@@ -148,7 +149,7 @@ const statusFilters = [
 ]
 
 export default function RegistrationsPage() {
-  const roles = useMe().data?.user.roles ?? []
+  const roles = useRoles()
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [status, setStatus] = useState("")
@@ -411,6 +412,8 @@ export default function RegistrationsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
               {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
+              <ExportCsv datasets={["registrations", "members"]} selectedIds={chosen} ignored={date ? "The date filter is not applied to exports." : undefined}
+                filters={{ search: search.term || undefined, status: status || undefined, category: category !== "all" ? category : undefined }} />
               <RichButton
                 type="button"
                 color="zinc"

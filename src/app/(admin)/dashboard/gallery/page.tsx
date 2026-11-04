@@ -7,7 +7,7 @@ import { api, dateTime, errorMessage } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
 import { sendToStorage, type SignedUpload } from "@/lib/storage-upload"
 import { prepareGalleryPhoto, type PreparedPhoto } from "@/lib/webp"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 
 type Photo = {
   id: string
@@ -47,8 +47,7 @@ function megabytes(bytes: number) {
 }
 
 export default function GalleryPage() {
-  const me = useMe()
-  const editable = can.eventControl(me.data?.user.roles ?? [])
+  const editable = can.eventControl(useRoles())
   const gallery = useAdminQuery<Gallery>(keys.gallery, "/api/admin/gallery")
   const input = useRef<HTMLInputElement>(null)
   const [caption, setCaption] = useState("")

@@ -8,7 +8,8 @@ import { Bones } from "@/components/admin/bones"
 import { api, dateTime, errorMessage } from "@/lib/api"
 import { SearchBox } from "@/components/admin/search-box"
 import { useTableSearch } from "@/hooks/use-table-search"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { ExportCsv } from "@/components/admin/export-csv"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
 type Contact = { id: string; name: string; email: string; subject: string; preview: string; status: string; assigned_to: string | null; created_at: string; updated_at: string }
@@ -20,8 +21,7 @@ const FILTERS = [["ACTIVE", "Open inbox"], ["NEW", "New"], ["OPEN", "In progress
 const AREA = [["contacts"], ["contact"]]
 
 export default function ContactsPage() {
-  const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   const [status, setStatus] = useState<string>("ACTIVE")
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState<string | null>(null)
@@ -40,7 +40,8 @@ export default function ContactsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Contacts" description="Messages from the public contact form. Replies are emailed to the sender; notes stay internal." />
+      <PageHeader title="Contacts" description="Messages from the public contact form. Replies are emailed to the sender; notes stay internal."
+        actions={<ExportCsv datasets={["contacts"]} filters={{ status, search: search.term || undefined }} />} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <Panel
           title="Inbox"

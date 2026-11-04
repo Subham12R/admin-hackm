@@ -12,7 +12,8 @@ import { adminQuery, overviewSchema, toOverview } from "@/lib/admin-client"
 import { notify } from "@/lib/notify"
 import { SearchBox } from "@/components/admin/search-box"
 import { useTableSearch } from "@/hooks/use-table-search"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { ExportCsv } from "@/components/admin/export-csv"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 
 type ReviewItem = {
   id: string
@@ -40,8 +41,7 @@ const REASONS: Record<string, string> = {
 const RAZORPAY_PAYMENT = "https://dashboard.razorpay.com/app/payments/"
 
 export default function PaymentsPage() {
-  const me = useMe()
-  const money = can.money(me.data?.user.roles ?? [])
+  const money = can.money(useRoles())
   const review = useAdminQuery<{ items: ReviewItem[] }>(keys.paymentsReview, "/api/admin/payments/review", { refetchInterval: 30_000 })
   // Same numbers as the overview, so they never disagree.
   const overview = useQuery({ queryKey: keys.overview, queryFn: adminQuery("/api/admin/overview", overviewSchema), select: toOverview, refetchInterval: 60_000 })
@@ -56,7 +56,8 @@ export default function PaymentsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Payments" description="Captured money that could not be matched to a registration automatically. Nothing here is lost; each needs a decision." />
+      <PageHeader title="Payments" description="Captured money that could not be matched to a registration automatically. Nothing here is lost; each needs a decision."
+        actions={<ExportCsv datasets={["payments"]} filters={{ search: search.term || undefined }} />} />
       <Panel title="Registration payments" description="Teams with an active registration.">
         {metrics ? (
           <p className="text-sm tracking-tighter">

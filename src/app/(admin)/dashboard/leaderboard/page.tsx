@@ -7,11 +7,12 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 
 import { Badge, Button, ConfirmButton, Empty, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
+import { ExportCsv } from "@/components/admin/export-csv"
 import { Bones } from "@/components/admin/bones"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { adminQuery, evaluatorsSchema, submissionsSchema } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useAdminQuery, useMe } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 import { useStages } from "@/lib/stages"
 
@@ -57,8 +58,7 @@ function Rounds() {
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
-  const me = useMe()
-  const roles = me.data?.user.roles ?? []
+  const roles = useRoles()
   const rounds = useAdminQuery<{ items: Round[] }>(keys.rounds, "/api/admin/rounds", { refetchInterval: 30_000 })
   const items = rounds.data?.items ?? []
   // The round lives in the URL so a reload (or a shared link) never silently switches rounds;
@@ -79,11 +79,14 @@ function Rounds() {
         title="Rounds & Results"
         description="Set up judging rounds, assign judges, then generate, lock, and release results. Nothing is public until you release it."
         actions={items.length ? (
-          <Field label="Round">
-            <Select value={roundId ?? ""} onChange={(event) => setSelected(event.target.value)}>
-              {items.map((item) => <option key={item.id} value={item.id}>{item.sequence}. {item.name}{item.stage ? ` · ${item.stage.name}` : ""} ({item.status.toLowerCase()})</option>)}
-            </Select>
-          </Field>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Round">
+              <Select value={roundId ?? ""} onChange={(event) => setSelected(event.target.value)}>
+                {items.map((item) => <option key={item.id} value={item.id}>{item.sequence}. {item.name}{item.stage ? ` · ${item.stage.name}` : ""} ({item.status.toLowerCase()})</option>)}
+              </Select>
+            </Field>
+            <ExportCsv datasets={["results", "scores"]} filters={{ round_id: roundId ?? undefined }} />
+          </div>
         ) : null}
       />
       {rounds.isError ? <Notice tone="red">{errorMessage(rounds.error, "Rounds could not be loaded.")}</Notice> : null}

@@ -130,6 +130,9 @@ function TrackList({ tracks }: { tracks: Registration["tracks"] }) {
   )
 }
 
+/** "Not verified" (PENDING) = registered teams still waiting on details review, like the amber rows. */
+type ReviewFilter = "all" | "PENDING" | "VERIFIED" | "DECLINED"
+
 const FINALS_LABELS: Record<TeamFinals["status"], string> = { PENDING: "not decided", ACCEPTED: "accepted", DECLINED: "not selected" }
 
 export default function TeamsPage() {
@@ -141,6 +144,7 @@ export default function TeamsPage() {
   const [date, setDate] = useState<Date>()
   const [category, setCategory] = useState<RegistrationCategory | "all">("all")
   const [finals, setFinals] = useState<TeamFinals["status"] | "all">("all")
+  const [review, setReview] = useState<ReviewFilter>("all")
   const [page, setPage] = useState(1)
   const search = useTableSearch(() => setPage(1))
   const [expandedRegistration, setExpandedRegistration] = useState<string | null>(null)
@@ -154,6 +158,7 @@ export default function TeamsPage() {
   if (date) params.set("date", format(date, "yyyy-MM-dd"))
   if (category !== "all") params.set("category", category)
   if (finals !== "all") params.set("finals", finals)
+  if (review !== "all") params.set("review", review)
   if (search.term) params.set("search", search.term)
   const query = useQuery({
     queryKey: keys.teams(params.toString()),
@@ -164,7 +169,7 @@ export default function TeamsPage() {
   })
   const data = query.data ?? null
   const loadError = query.isError ? "Teams could not be loaded." : ""
-  const review = useAdminMutation<{ registrationId: string; status: string }>(
+  const reviewMutation = useAdminMutation<{ registrationId: string; status: string }>(
     ({ registrationId, status }) => ({ path: `/api/admin/teams/${registrationId}/review`, body: { status } }),
     REGISTRATION_AREAS
   )
@@ -180,7 +185,7 @@ export default function TeamsPage() {
   }))
   const pageCount = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
   const visibleRegistrations = registrations
-  const hasFilters = Boolean(date) || category !== "all" || finals !== "all" || Boolean(search.term)
+  const hasFilters = Boolean(date) || category !== "all" || finals !== "all" || review !== "all" || Boolean(search.term)
   const visibleColumns = registrationColumns.filter((column) =>
     selectedColumns.includes(column.key)
   )
@@ -204,6 +209,7 @@ export default function TeamsPage() {
     setDate(undefined)
     setCategory("all")
     setFinals("all")
+    setReview("all")
     search.setValue("")
     resetPage()
   }
@@ -226,7 +232,7 @@ export default function TeamsPage() {
   }
 
   async function reviewTeam(registrationId: string, status: "PENDING" | "VERIFIED" | "DECLINED") {
-    await notify(review.mutateAsync({ registrationId, status }), status === "VERIFIED" ? "Team verified." : status === "DECLINED" ? "Team declined." : "Team moved back to pending.")
+    await notify(reviewMutation.mutateAsync({ registrationId, status }), status === "VERIFIED" ? "Team verified." : status === "DECLINED" ? "Team declined." : "Team moved back to pending.")
   }
 
   return (
@@ -343,6 +349,22 @@ export default function TeamsPage() {
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
+                Review
+                <select
+                  value={review}
+                  onChange={(event) => {
+                    setReview(event.target.value as ReviewFilter)
+                    resetPage()
+                  }}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="all">All teams</option>
+                  <option value="PENDING">Not verified</option>
+                  <option value="VERIFIED">Verified</option>
+                  <option value="DECLINED">Declined</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs tracking-tighter text-muted-foreground">
                 Finals
                 <select
                   value={finals}
@@ -398,7 +420,7 @@ export default function TeamsPage() {
               </DropdownMenu>
               {canEmail ? <EmailMatching filters={params} total={data?.total ?? 0} /> : null}
               <ExportCsv datasets={["teams", "members"]} selectedIds={chosen} ignored={date ? "The date filter is not applied to exports." : undefined}
-                filters={{ search: search.term || undefined, category: category !== "all" ? category : undefined, finals: finals !== "all" ? finals : undefined }} />
+                filters={{ search: search.term || undefined, category: category !== "all" ? category : undefined, finals: finals !== "all" ? finals : undefined, review: review !== "all" ? review : undefined }} />
               <RichButton
                 type="button"
                 color="zinc"
@@ -526,7 +548,7 @@ export default function TeamsPage() {
                                   <select
                                     aria-label={`Details review for ${registration.teamName}`}
                                     value={registration.review.status}
-                                    disabled={!canReview || (review.isPending && review.variables?.registrationId === registration.registrationId)}
+                                    disabled={!canReview || (reviewMutation.isPending && reviewMutation.variables?.registrationId === registration.registrationId)}
                                     onChange={(event) => {
                                       void reviewTeam(
                                         registration.registrationId,

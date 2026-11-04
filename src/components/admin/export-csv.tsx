@@ -36,7 +36,7 @@ export type ExportJob = {
 
 type Scope = ExportJob["scope"]
 /** Filter keys the backend understands; anything else on the table (like a date) is not applied. */
-type ExportFilters = Partial<Record<"search" | "status" | "category" | "finals" | "stage_id" | "track_id" | "round_id", string>>
+type ExportFilters = Partial<Record<"search" | "status" | "category" | "finals" | "review" | "stage_id" | "track_id" | "round_id", string>>
 
 const FIELDS_KEY = (dataset: string) => `hm:export-fields:${dataset}`
 

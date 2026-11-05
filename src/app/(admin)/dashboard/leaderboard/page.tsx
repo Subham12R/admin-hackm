@@ -15,8 +15,8 @@ import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 import { useStages } from "@/lib/stages"
+import { JUDGING_AREAS, RubricEditor, type Criterion } from "@/components/admin/rubric-editor"
 
-type Criterion = { key: string; label: string; max_score: number; weight: number }
 type Round = {
   id: string
   name: string
@@ -27,6 +27,8 @@ type Round = {
   results_status: "NONE" | "DRAFT" | "LOCKED" | "RELEASED"
   assignments: number
   submitted_scorecards: number
+  scorecards_started: number
+  rubric_confirmed_at: string | null
   criteria: Criterion[]
   stage: { id: string; name: string } | null
 }
@@ -43,7 +45,6 @@ type Results = {
   live_preview: { registration_id: string; team_name: string; project_name: string; anonymous_code: string | null; score: number | null; evaluations: number; eligible: boolean; reason: string | null }[]
 }
 
-const JUDGING_AREAS = [["rounds"], ["board"], ["results"], ["submissions"], ["evaluations"], ["evaluators"]]
 const REASONS: Record<string, string> = { not_enough_evaluations: "Needs more scorecards", balance_due: "Balance due" }
 
 export default function RoundsPage() {
@@ -93,7 +94,7 @@ function Rounds() {
       {can.assign(roles) ? <NewRound onCreated={(id) => setSelected(id)} run={run} /> : null}
       {rounds.isPending ? <LoadingRows /> : round ? (
         <>
-          <RoundSettings key={round.id} round={round} roles={roles} run={run} />
+          <RoundSettings key={round.id} round={round} rounds={items} roles={roles} run={run} />
           <RoundBoard round={round} roles={roles} run={run} />
           <RoundResults round={round} roles={roles} run={run} />
         </>
@@ -112,7 +113,7 @@ function NewRound({ onCreated, run }: { onCreated: (id: string) => void; run: Ru
   const stageId = form.stage_id || stages.data?.items[0]?.id || ""
   if (!open) return <div><Button onClick={() => setOpen(true)}>New round</Button></div>
   return (
-    <Panel title="New round" description="New rounds start as drafts with the default five-criterion rubric.">
+    <Panel title="New round" description="New rounds start as drafts with the default five-metric rubric; set and confirm the metrics before opening.">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Name"><TextInput value={form.name} maxLength={120} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Finals" /></Field>
         <Field label="Event judged">
@@ -137,7 +138,7 @@ function NewRound({ onCreated, run }: { onCreated: (id: string) => void; run: Ru
   )
 }
 
-function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; run: Run }) {
+function RoundSettings({ round, rounds, roles, run }: { round: Round; rounds: Round[]; roles: string[]; run: Run }) {
   const editable = can.assign(roles)
   const update = useAdminMutation<Partial<Round>>((body) => ({ path: `/api/admin/rounds/${round.id}`, method: "PATCH", body }), JUDGING_AREAS)
   const remove = useAdminMutation<void>(() => ({ path: `/api/admin/rounds/${round.id}`, method: "DELETE" }), JUDGING_AREAS)
@@ -154,7 +155,7 @@ function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; r
           <StatusBadge status={round.status} />
           {editable ? (
             <>
-              {round.status !== "OPEN" ? <ConfirmButton tone="green" confirmLabel="Open for scoring" disabled={update.isPending} onConfirm={() => run(update.mutateAsync({ status: "OPEN" }), "Round opened; judges can score now.")}>Open round</ConfirmButton> : null}
+              {round.status !== "OPEN" ? <ConfirmButton tone="green" confirmLabel="Open for scoring" disabled={update.isPending || !round.rubric_confirmed_at} onConfirm={() => run(update.mutateAsync({ status: "OPEN" }), "Round opened; judges can score now.")}>Open round</ConfirmButton> : null}
               {round.status === "OPEN" ? <ConfirmButton confirmLabel="Close scoring" disabled={update.isPending} onConfirm={() => run(update.mutateAsync({ status: "CLOSED" }), "Round closed; scores are frozen.")}>Close round</ConfirmButton> : null}
               {deletable ? <ConfirmButton confirmLabel="Delete round" disabled={remove.isPending} onConfirm={() => run(remove.mutateAsync(undefined), "Round deleted.")}>Delete</ConfirmButton> : null}
             </>
@@ -171,39 +172,10 @@ function RoundSettings({ round, roles, run }: { round: Round; roles: string[]; r
         ) : null}
       </div>
       {/* Remounted only when the saved rubric changes, so background refetches keep unsaved edits. */}
-      <RubricEditor key={JSON.stringify(round.criteria)} round={round} editable={editable} run={run} />
-    </Panel>
-  )
-}
-
-function RubricEditor({ round, editable, run }: { round: Round; editable: boolean; run: Run }) {
-  const rubric = useAdminMutation<{ criteria: Criterion[] }>((body) => ({ path: `/api/admin/rounds/${round.id}/criteria`, method: "PUT", body }), JUDGING_AREAS)
-  const [criteria, setCriteria] = useState<Criterion[]>(round.criteria)
-  const rubricChanged = JSON.stringify(criteria) !== JSON.stringify(round.criteria)
-  const keysValid = criteria.length > 0 && criteria.every((item) => /^[a-z][a-z0-9_]{0,59}$/.test(item.key) && item.label.trim() && item.max_score > 0 && item.weight > 0)
-    && new Set(criteria.map((item) => item.key)).size === criteria.length
-  return (
-    <>
-      <h3 className="mt-4 mb-2 font-medium tracking-tight">Rubric {round.submitted_scorecards ? <Badge>locked: scoring started</Badge> : null}</h3>
-      <div className="grid gap-2">
-        {criteria.map((criterion, index) => (
-          <div key={index} className="grid gap-2 sm:grid-cols-[10rem_1fr_6rem_6rem_auto] sm:items-end">
-            <Field label="Key"><TextInput value={criterion.key} disabled={!editable || round.submitted_scorecards > 0} onChange={(event) => setCriteria(criteria.map((item, position) => position === index ? { ...item, key: event.target.value.toLowerCase() } : item))} /></Field>
-            <Field label="Label"><TextInput value={criterion.label} disabled={!editable || round.submitted_scorecards > 0} onChange={(event) => setCriteria(criteria.map((item, position) => position === index ? { ...item, label: event.target.value } : item))} /></Field>
-            <Field label="Max score"><TextInput type="number" min={1} max={100} value={criterion.max_score} disabled={!editable || round.submitted_scorecards > 0} onChange={(event) => setCriteria(criteria.map((item, position) => position === index ? { ...item, max_score: Number(event.target.value) } : item))} /></Field>
-            <Field label="Weight"><TextInput type="number" min={0.1} step={0.1} value={criterion.weight} disabled={!editable || round.submitted_scorecards > 0} onChange={(event) => setCriteria(criteria.map((item, position) => position === index ? { ...item, weight: Number(event.target.value) } : item))} /></Field>
-            {editable && !round.submitted_scorecards ? <Button onClick={() => setCriteria(criteria.filter((_, position) => position !== index))}>Remove</Button> : null}
-          </div>
-        ))}
-        {editable && !round.submitted_scorecards ? (
-          <div className="flex gap-2">
-            <Button onClick={() => setCriteria([...criteria, { key: `criterion_${criteria.length + 1}`, label: "", max_score: 10, weight: 1 }])}>Add criterion</Button>
-            {rubricChanged ? <Button tone="green" disabled={!keysValid || rubric.isPending} onClick={() => run(rubric.mutateAsync({ criteria }), "Rubric saved.")}>Save rubric</Button> : null}
-          </div>
-        ) : null}
-        {!keysValid ? <p className="text-xs text-red-600">Keys must be unique lowercase identifiers; every criterion needs a label, max score, and weight.</p> : null}
+      <div className="mt-4">
+        <RubricEditor key={`${JSON.stringify(round.criteria)}${round.rubric_confirmed_at}`} round={round} rounds={rounds} editable={editable && round.status !== "CLOSED"} run={run} />
       </div>
-    </>
+    </Panel>
   )
 }
 

@@ -19,7 +19,8 @@ type Detail = {
   total: number | null
   description: string
   links: { label: string; href: string }[]
-  criteria: { key: string; label: string; max_score: number; weight: number }[]
+  answers?: { key: string; label: string; type: string; value: string }[]
+  criteria: { key: string; label: string; description?: string; max_score: number; weight: number }[]
   scores: Record<string, number>
   comments: string
   submitted_at: string | null
@@ -66,13 +67,26 @@ function ScoreForm({ data }: { data: Detail }) {
             </a>
           ))}
         </div>
+        {data.answers?.length ? (
+          <dl className="mt-4 grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[minmax(8rem,auto)_1fr]">
+            {data.answers.map((answer) => (
+              <div key={answer.key} className="contents">
+                <dt className="text-muted-foreground">{answer.label}</dt>
+                <dd className="whitespace-pre-wrap break-words">
+                  {answer.type === "url" ? <a href={answer.value} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">{answer.value}</a> : answer.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
         <p className="mt-3 text-xs text-muted-foreground">Repository links can reveal usernames. Score the work, and declare any conflict of interest to the organisers.</p>
       </Panel>
       <Panel title="Scorecard" description={`Weighted total: ${preview.toFixed(1)}%`}>
         <div className="grid gap-3 sm:grid-cols-2">
           {data.criteria.map((criterion) => (
             <Field key={criterion.key} label={`${criterion.label} (0–${criterion.max_score}${criterion.weight !== 1 ? `, weight ${criterion.weight}` : ""})`}
-              hint={invalid.includes(criterion) ? `Whole number from 0 to ${criterion.max_score}` : undefined}>
+              error={invalid.includes(criterion) ? `Whole number from 0 to ${criterion.max_score}` : undefined}
+              hint={criterion.description || undefined}>
               <input type="number" min={0} max={criterion.max_score} step={1} disabled={!writable} value={scores[criterion.key] ?? ""}
                 onChange={(event) => setScores({ ...scores, [criterion.key]: event.target.value })}
                 className="h-9 rounded-md border border-border bg-card px-2 text-base text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:bg-muted/50" />

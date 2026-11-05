@@ -10,12 +10,13 @@ import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, P
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { adminQuery, evaluatorsSchema, submissionsSchema, toSubmissions, type Submission } from "@/lib/admin-client"
 import { dateTime, errorMessage } from "@/lib/api"
-import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
+import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { notify, toast } from "@/lib/notify"
 import { SearchBox } from "@/components/admin/search-box"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { ExportCsv } from "@/components/admin/export-csv"
 import { PLACEMENTS, useStages } from "@/lib/stages"
+import { RubricEditor, type RubricRound } from "@/components/admin/rubric-editor"
 
 const statusTone = { Draft: "zinc", Submitted: "amber", Evaluated: "green" } as const
 
@@ -125,6 +126,7 @@ function Submissions() {
         }
       />
       {stages.isError ? <Notice tone="red">{errorMessage(stages.error, "Events could not be loaded.")}</Notice> : null}
+      {round ? <RubricPanel roundId={round.id} editable={canAssign} run={run} /> : null}
       {winners.length ? (
         <Panel title="Winners" description={`Placings in ${stage?.name ?? "this event"}${trackId ? " for this problem statement" : ""}. Mark them from a submission's details.`}>
           <ul className="flex flex-wrap gap-2">
@@ -154,6 +156,9 @@ function Submissions() {
         }
       >
         {submissions.isError ? <Notice tone="red">{errorMessage(submissions.error, "Submissions could not be loaded.")}</Notice> : null}
+        {chosen.length && round && !round.rubric_confirmed_at ? (
+          <Notice tone="amber">The rubric for {round.name} is not confirmed yet. You can assign judges now, but set the metrics above before opening the round.</Notice>
+        ) : null}
         {chosen.length && round && evaluators.data ? (
           <BulkAssignBar
             roundId={round.id}
@@ -262,7 +267,22 @@ function Submissions() {
                   <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableCell colSpan={columns} className="whitespace-normal p-4">
                       <div className="flex flex-wrap items-start justify-between gap-4">
-                        <p className="max-w-3xl whitespace-pre-wrap text-sm">{row.description || "No description provided."}</p>
+                        <div className="max-w-3xl space-y-3">
+                          <p className="whitespace-pre-wrap text-sm">{row.description || "No description provided."}</p>
+                          {row.answers.length ? (
+                            <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[minmax(8rem,auto)_1fr]">
+                              {row.answers.map((answer) => (
+                                <Fragment key={answer.key}>
+                                  <dt className="text-muted-foreground">
+                                    {answer.label}
+                                    {answer.archived ? <Badge>removed field</Badge> : !answer.show_to_judges ? <Badge>hidden from judges</Badge> : null}
+                                  </dt>
+                                  <dd className="whitespace-pre-wrap break-words">{answer.value}</dd>
+                                </Fragment>
+                              ))}
+                            </dl>
+                          ) : null}
+                        </div>
                         {row.submissionStatus === "SUBMITTED" && row.submissionId && canAssign ? (
                           <AwardControls
                             submissionId={row.submissionId}
@@ -293,6 +313,29 @@ function Submissions() {
         </Table>
       </Panel>
     </div>
+  )
+}
+
+/** The current round's metrics, right where judges get assigned; collapsed once confirmed. */
+function RubricPanel({ roundId, editable, run }: { roundId: string; editable: boolean; run: (promise: Promise<unknown>, success: string) => void }) {
+  const rounds = useAdminQuery<{ items: RubricRound[] }>(keys.rounds, "/api/admin/rounds")
+  const items = rounds.data?.items ?? []
+  const round = items.find((item) => item.id === roundId)
+  const [open, setOpen] = useState<boolean | null>(null)
+  if (!round) return null
+  const showing = open ?? !round.rubric_confirmed_at
+  const summary = round.criteria.map((item) => item.label).join(" · ")
+  return (
+    <Panel
+      title={`Evaluation metrics · ${round.name}`}
+      description={showing ? "What judges score each project on. They see these names and descriptions on every scorecard." : summary}
+      actions={<Button onClick={() => setOpen(!showing)} aria-expanded={showing}>{showing ? "Hide" : round.rubric_confirmed_at ? "Edit metrics" : "Set metrics"}</Button>}
+    >
+      {showing ? (
+        <RubricEditor key={`${JSON.stringify(round.criteria)}${round.rubric_confirmed_at}`} round={round} rounds={items}
+          editable={editable && round.status !== "CLOSED"} run={run} />
+      ) : null}
+    </Panel>
   )
 }
 

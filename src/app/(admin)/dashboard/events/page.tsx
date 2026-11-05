@@ -5,6 +5,7 @@ import { useState } from "react"
 
 import { Badge, Button, ConfirmButton, Empty, Field, Notice, PageHeader, Panel, Select, StatusBadge, TextArea, TextInput } from "@/components/admin/kit"
 import { Bones } from "@/components/admin/bones"
+import { SubmissionFormBuilder } from "@/components/admin/submission-form-builder"
 import { ApiError, dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
 import { can, useAdminMutation, useRoles } from "@/lib/queries"
@@ -216,6 +217,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
           ) : null}
           {stage.tracks.length ? stage.tracks.map((track) => <TrackEditor key={`${track.id}-${track.version}`} track={track} editable={editable} />) : <Empty>No problem statements yet.</Empty>}
         </div>
+        <SubmissionFormBuilder stageId={stage.id} editable={editable} />
       </div>
     </Panel>
   )

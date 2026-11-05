@@ -13,7 +13,8 @@ import { useHydrated } from "@/hooks/use-hydrated"
 import { can, keys, useRoles } from "@/lib/queries"
 
 export type ExportField = { key: string; label: string; default: boolean }
-export type ExportDataset = { key: string; label: string; one_row_per: string; fields: ExportField[] }
+export type ExportPreset = { key: string; label: string; description: string; fields: string[] }
+export type ExportDataset = { key: string; label: string; one_row_per: string; fields: ExportField[]; presets?: ExportPreset[]; all_events?: boolean }
 export type ExportJob = {
   id: string
   dataset: string
@@ -123,6 +124,7 @@ function ExportPanel({ datasets, filters, selectedIds, ignored }: {
   const [scope, setScope] = useState<Scope>(selectedIds.length ? "SELECTED" : "FILTERED")
   const [busy, setBusy] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
+  const [allEvents, setAllEvents] = useState(false)
 
   // Load the columns this person used last time for this dataset.
   useEffect(() => {
@@ -138,7 +140,10 @@ function ExportPanel({ datasets, filters, selectedIds, ignored }: {
     refetchInterval: (query) => (query.state.data && !["QUEUED", "RUNNING"].includes(query.state.data.status) ? false : 1500),
   })
 
-  const activeFilters = Object.entries(filters).filter(([, value]) => value)
+  // "Every event" swaps the table's event (and its problem statement) for all of them.
+  const everyEvent = allEvents && Boolean(dataset?.all_events)
+  const effective: ExportFilters = everyEvent ? { ...filters, stage_id: "all", track_id: undefined } : filters
+  const activeFilters = Object.entries(effective).filter(([, value]) => value)
   const chosen = fields ?? []
 
   function toggle(key: string, checked: boolean) {
@@ -198,7 +203,32 @@ function ExportPanel({ datasets, filters, selectedIds, ignored }: {
               <p className="pl-6 text-xs text-muted-foreground">{activeFilters.map(([key, value]) => `${key.replace("_id", "")}: ${value}`).join(" · ")}</p>
             ) : null}
             {ignored && scope === "FILTERED" ? <p className="pl-6 text-xs text-amber-700 dark:text-amber-400">{ignored}</p> : null}
+            {dataset.all_events && scope !== "SELECTED" ? (
+              <label className="flex items-center gap-2 pt-1">
+                <input type="checkbox" checked={allEvents} onChange={(event) => setAllEvents(event.target.checked)} />
+                Include every event, not just the one picked above
+              </label>
+            ) : null}
           </fieldset>
+
+          {dataset.presets?.length ? (
+            <fieldset className="space-y-1.5">
+              <legend className="mb-1 font-medium">Presets</legend>
+              <div className="flex flex-wrap gap-2">
+                {dataset.presets.map((preset) => {
+                  const active = preset.fields.length === chosen.length && preset.fields.every((key) => chosen.includes(key))
+                  return (
+                    <button key={preset.key} type="button" title={preset.description} onClick={() => setFields(preset.fields)}
+                      className={`rounded-md border px-2 py-1 text-xs ${active ? "border-foreground bg-foreground text-background" : "border-border hover:bg-muted"}`}>
+                      {preset.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {dataset.presets.filter((preset) => preset.fields.length === chosen.length && preset.fields.every((key) => chosen.includes(key)))
+                .map((preset) => <p key={preset.key} className="text-xs text-muted-foreground">{preset.description}</p>)}
+            </fieldset>
+          ) : null}
 
           <fieldset className="space-y-1">
             <div className="mb-1 flex items-center justify-between">

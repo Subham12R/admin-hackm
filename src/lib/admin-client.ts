@@ -155,6 +155,7 @@ export const submissionsSchema = z.object({
       project_name: z.string(),
       description: z.string(),
       links: z.array(z.object({ label: z.string(), href: z.string() })),
+      answers: z.array(z.object({ key: z.string(), label: z.string(), value: z.string(), show_to_judges: z.boolean().default(true), archived: z.boolean().default(false) })).default([]),
       start_time: z.string(),
       updated_at: z.string().nullable(),
       end_time: z.string().nullable(),
@@ -174,7 +175,7 @@ export const submissionsSchema = z.object({
       awards: z.array(awardSchema).default([]),
     })
   ),
-  round: z.object({ id: z.string(), name: z.string(), status: z.string() }).nullable(),
+  round: z.object({ id: z.string(), name: z.string(), status: z.string(), rubric_confirmed_at: z.string().nullable().default(null) }).nullable(),
   stage: z.object({ id: z.string(), name: z.string(), eligibility: z.string() }).nullable().default(null),
   tracks: z.array(trackRefSchema).default([]),
 })
@@ -304,6 +305,7 @@ export type Submission = {
   projectName: string
   description: string
   links: { label: string; href: string }[]
+  answers: { key: string; label: string; value: string; show_to_judges: boolean; archived: boolean }[]
   startTime: string
   updatedAt: string | null
   endTime: string | null
@@ -438,6 +440,7 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
     projectName: submission.project_name,
     description: submission.description,
     links: submission.links,
+    answers: submission.answers,
     startTime: submission.start_time,
     updatedAt: submission.updated_at,
     endTime: submission.end_time,

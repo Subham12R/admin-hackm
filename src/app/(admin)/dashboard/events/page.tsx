@@ -129,8 +129,8 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
         </span>
       }
     >
-      <div className="grid gap-4">
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (editable && dirty) submit() }}>
+      <div className="grid min-w-0 grid-cols-1 gap-4">
+        <form className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (editable && dirty) submit() }}>
           <Field label="Name">
             <TextInput value={form.name} disabled={!editable} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
@@ -147,7 +147,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
           {SCHEDULE.map(([key, label]) => (
             <Field key={key} label={`${label} (IST)`} hint={form.schedule[key] !== initial.schedule[key] ? "Unsaved change" : key === "statements_release_at" ? "Leave empty to keep them hidden." : undefined}>
               <span className="flex gap-1">
-                <TextInput type="datetime-local" disabled={!editable} value={form.schedule[key]} className="flex-1"
+                <TextInput type="datetime-local" disabled={!editable} value={form.schedule[key]} className="min-w-0 flex-1"
                   onChange={(event) => setForm({ ...form, schedule: { ...form.schedule, [key]: event.target.value } })} />
                 {editable && form.schedule[key] ? <Button onClick={() => setForm({ ...form, schedule: { ...form.schedule, [key]: "" } })} aria-label={`Clear ${label}`}>Clear</Button> : null}
               </span>
@@ -187,9 +187,9 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
           ) : null}
         </form>
 
-        <div className="grid gap-3 border-t border-border pt-4">
+        <div className="grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
+            <div className="min-w-0 flex-[1_1_16rem]">
               <p className="font-medium">Problem statements</p>
               <p className="text-xs text-muted-foreground">
                 {stage.statements.released
@@ -199,7 +199,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
               </p>
             </div>
             {editable ? (
-              <span className="flex flex-wrap gap-1">
+              <span className="flex max-w-full flex-wrap gap-1">
               {!stage.statements.released && stage.tracks.length ? (
                 <ConfirmButton tone="green" confirmLabel="Show them to teams now" disabled={save.isPending}
                   onConfirm={() => void notify(save.mutateAsync({ statements_release_at: new Date().toISOString() }), "Problem statements revealed.")}>
@@ -243,13 +243,13 @@ function TrackEditor({ track, editable }: { track: Track; editable: boolean }) {
   }
 
   return (
-    <div className="rounded-lg border border-border p-3 transition-colors hover:border-foreground/25">
+    <div className="min-w-0 rounded-lg border border-border p-3 transition-colors hover:border-foreground/25">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <button type="button" className="min-w-0 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <p className="truncate font-medium">{track.title}</p>
-          <p className="truncate text-xs text-muted-foreground">{track.summary || "No summary"} · {track.resources.length} resource{track.resources.length === 1 ? "" : "s"}</p>
+        <button type="button" className="min-w-0 flex-[1_1_16rem] text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <p className="break-words font-medium">{track.title}</p>
+          <p className="line-clamp-2 break-words text-xs text-muted-foreground">{track.summary || "No summary"} · {track.resources.length} resource{track.resources.length === 1 ? "" : "s"}</p>
         </button>
-        <span className="flex gap-1">
+        <span className="flex shrink-0 gap-1">
           {dirty ? <Badge tone="amber">unsaved</Badge> : null}
           <Button onClick={() => setOpen(!open)}>{open ? "Close" : editable ? "Edit" : "View"}</Button>
         </span>

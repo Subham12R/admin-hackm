@@ -50,9 +50,9 @@ export function SubmissionFormBuilder({ stageId, editable }: { stageId: string; 
   const [open, setOpen] = useState(false)
   const form = useAdminQuery<FormPayload>(["submission-form", stageId], open ? `/api/admin/stages/${stageId}/submission-form` : null)
   return (
-    <div className="grid gap-3 border-t border-border pt-4">
+    <div className="grid min-w-0 grid-cols-1 gap-3 border-t border-border pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
+        <div className="min-w-0 flex-[1_1_16rem]">
           <p className="font-medium">Submission form</p>
           <p className="text-xs text-muted-foreground">The fields teams fill in for this event. Judges see the answers you allow; every answer is in the Submissions CSV.</p>
         </div>

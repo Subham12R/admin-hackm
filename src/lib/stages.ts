@@ -1,6 +1,7 @@
 import { keys, useAdminQuery } from "@/lib/queries"
 
-export type Resource = { label: string; url: string }
+/** Protected resources open inside the participant dashboard; teams never get the link. Google files only. */
+export type Resource = { label: string; url: string; protected?: boolean }
 export type Track = {
   id: string
   title: string

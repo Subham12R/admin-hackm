@@ -13,6 +13,9 @@ import { ELIGIBILITY, useStages, type Resource, type Stage, type Track } from "@
 
 const AREAS = [["stages"], ["submissions"], ["event"], ["challenge"]]
 const LINK = /^https?:\/\/\S+$/
+// Same links the backend can fetch as a PDF (hackm-backend src/events/resources.py).
+const GOOGLE_FILE = /^https?:\/\/(docs\.google\.com\/(document|spreadsheets|presentation)(\/u\/\d+)?\/d\/[\w-]{20,}|drive\.google\.com\/(file(\/u\/\d+)?\/d\/[\w-]{20,}|(open|uc)\?(.*&)?id=[\w-]{20,}))/
+const protectable = (url: string) => GOOGLE_FILE.test(url.trim())
 const SCHEDULE = [
   ["submission_opens_at", "Submissions open"],
   ["submission_closes_at", "Submissions close"],
@@ -228,7 +231,7 @@ function TrackEditor({ track, editable }: { track: Track; editable: boolean }) {
   const [open, setOpen] = useState(false)
   const save = useAdminMutation<typeof form & { version: number }>((body) => ({ path: `/api/admin/tracks/${track.id}`, method: "PUT", body }), AREAS)
   const remove = useAdminMutation<void>(() => ({ path: `/api/admin/tracks/${track.id}`, method: "DELETE" }), AREAS)
-  const badLink = form.resources.some((resource) => !resource.label.trim() || !LINK.test(resource.url.trim()))
+  const badLink = form.resources.some((resource) => !resource.label.trim() || !LINK.test(resource.url.trim()) || (resource.protected && !protectable(resource.url)))
   const dirty = JSON.stringify(form) !== JSON.stringify({ title: track.title, summary: track.summary, body: track.body, resources: track.resources })
 
   function setResource(index: number, patch: Partial<Resource>) {
@@ -236,7 +239,7 @@ function TrackEditor({ track, editable }: { track: Track; editable: boolean }) {
   }
 
   function submit() {
-    const resources = form.resources.map((item) => ({ label: item.label.trim(), url: item.url.trim() }))
+    const resources = form.resources.map((item) => ({ label: item.label.trim(), url: item.url.trim(), protected: !!item.protected }))
     save.mutateAsync({ ...form, title: form.title.trim(), resources, version: track.version })
       .then(() => toast.success(`Saved “${form.title.trim()}”.`))
       .catch((error: unknown) => toast.error(error instanceof ApiError && error.status === 409 ? "Someone else changed this problem statement. Reload the page and try again." : errorMessage(error)))
@@ -270,10 +273,15 @@ function TrackEditor({ track, editable }: { track: Track; editable: boolean }) {
             {form.resources.map((resource, index) => (
               <div key={index} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto] sm:items-end">
                 <Field label="Label"><TextInput value={resource.label} disabled={!editable} maxLength={120} placeholder="Dataset" onChange={(event) => setResource(index, { label: event.target.value })} /></Field>
-                <Field label="Link" error={resource.url && !LINK.test(resource.url.trim()) ? "Use a full link starting with https://" : undefined}>
+                <Field label="Link" error={resource.url && !LINK.test(resource.url.trim()) ? "Use a full link starting with https://"
+                  : resource.protected && resource.url && !protectable(resource.url) ? "Protected resources must be a Google Docs, Sheets, Slides or Drive file link" : undefined}>
                   <TextInput type="url" value={resource.url} disabled={!editable} maxLength={500} placeholder="https://…" onChange={(event) => setResource(index, { url: event.target.value })} />
                 </Field>
                 {editable ? <Button onClick={() => setForm({ ...form, resources: form.resources.filter((_, position) => position !== index) })}>Remove</Button> : null}
+                <label className="flex items-start gap-2 text-xs text-muted-foreground sm:col-span-3">
+                  <input type="checkbox" className="mt-0.5" checked={!!resource.protected} disabled={!editable} onChange={(event) => setResource(index, { protected: event.target.checked })} />
+                  <span><span className="font-medium text-foreground">Protected</span>: teams read it inside their dashboard with their team name stamped on it and never see the link. Share the Google file as &ldquo;Anyone with the link can view&rdquo; and don&rsquo;t post the link anywhere else.</span>
+                </label>
               </div>
             ))}
             {editable && form.resources.length < 20 ? (

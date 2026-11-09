@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Fragment, Suspense, useState } from "react"
 
 import { useQuery } from "@tanstack/react-query"
-import { ExternalLink, Lock } from "lucide-react"
+import { Clock, ExternalLink, Lock } from "lucide-react"
 
 import { Badge, Button, ConfirmButton, Field, LoadingRows, Notice, PageHeader, Panel, Select, StatusBadge, TextInput } from "@/components/admin/kit"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -60,6 +60,7 @@ function Submissions() {
   const [filter, setFilter] = useState<"all" | Submission["status"]>("all")
   const search = useTableSearch()
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
+  const [extraOpen, setExtraOpen] = useState(false)
   const assign = useAdminMutation<{ registrationId: string; email: string }>(
     ({ registrationId, email }) => ({ path: `/api/admin/submissions/${registrationId}/assign?stage_id=${stageId}`, body: { assignee_email: email } }),
     [["submissions"], ["evaluators"], ["board"]]
@@ -95,6 +96,8 @@ function Submissions() {
   const stage = submissions.data?.stage
   const tracks = submissions.data?.tracks ?? []
   const winners = rows.filter((row) => row.awards.length)
+  const eventControl = can.eventControl(roles)
+  const withExtra = rows.filter((row) => row.extraMinutes > 0).length
 
   function run(promise: Promise<unknown>, success: string) {
     void notify(promise, success)
@@ -146,6 +149,11 @@ function Submissions() {
         actions={
           <div className="flex flex-wrap items-end gap-2">
             <SearchBox label="" value={search.value} onChange={search.setValue} placeholder="Team, submission code or project" />
+            {eventControl && stageId ? (
+              <Button onClick={() => setExtraOpen((open) => !open)} aria-expanded={extraOpen}>
+                <Clock className="size-3.5" />Extra time{withExtra ? ` (${withExtra})` : ""}
+              </Button>
+            ) : null}
             <Select aria-label="Filter by status" value={filter} onChange={(event) => setFilter(event.target.value as typeof filter)}>
               <option value="all">All statuses</option>
               <option value="Draft">Draft / not started</option>
@@ -156,6 +164,10 @@ function Submissions() {
         }
       >
         {submissions.isError ? <Notice tone="red">{errorMessage(submissions.error, "Submissions could not be loaded.")}</Notice> : null}
+        {extraOpen && eventControl && stage ? (
+          <BulkExtraTime stageId={stageId} stageName={stage.name} closesAt={stage.submission_window?.closes_at ?? null}
+            timed={Boolean(stage.time_limit_minutes)} rows={visible} filtered={visible.length !== rows.length} onClose={() => setExtraOpen(false)} />
+        ) : null}
         {chosen.length && round && !round.rubric_confirmed_at ? (
           <Notice tone="amber">The rubric for {round.name} is not confirmed yet. You can assign judges now, but set the metrics above before opening the round.</Notice>
         ) : null}
@@ -249,6 +261,10 @@ function Submissions() {
                   </TableCell>
                   <TableCell className="text-xs">
                     {dateTime(row.endTime)}<p className="text-muted-foreground">updated {dateTime(row.updatedAt)}</p>
+                    {row.extraMinutes ? (
+                      <p className="mt-0.5"><Badge tone="amber"><Clock className="mr-1 inline size-3" />+{duration(row.extraMinutes)}</Badge>
+                        {row.closesAt && !row.timer ? <span className="ml-1 text-muted-foreground">closes {dateTime(row.closesAt)}</span> : null}</p>
+                    ) : null}
                     {row.timer ? (
                       <p className={row.timer.state === "EXPIRED" ? "text-red-600" : row.timer.state === "RUNNING" ? "text-emerald-700" : "text-muted-foreground"}>
                         {row.timer.state === "NOT_STARTED" ? "Clock not started"
@@ -294,6 +310,9 @@ function Submissions() {
                         ) : null}
                         {tracks.length > 1 && can.eventControl(roles) ? (
                           <TrackControls stageId={stageId} registrationId={row.registrationId} current={row.track} tracks={tracks} hasTrackAward={row.awards.some((award) => award.track)} />
+                        ) : null}
+                        {eventControl ? (
+                          <ExtraTimeControls stageId={stageId} row={row} timed={Boolean(stage?.time_limit_minutes)} />
                         ) : null}
                         {row.submissionStatus === "SUBMITTED" && can.eventControl(roles) ? (
                           <ConfirmButton confirmLabel="Reopen for editing" disabled={reopen.isPending}
@@ -419,6 +438,132 @@ function BulkAssignBar({ roundId, roundName, registrationIds, judges, onDone }: 
         })}
         {!judges.length ? <span className="text-xs text-muted-foreground">No active judges yet. Invite them under Settings.</span> : null}
       </fieldset>
+    </div>
+  )
+}
+
+/** "45 min", "2 h", "1 h 30 min". */
+function duration(minutes: number) {
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  if (!hours) return `${rest} min`
+  return rest ? `${hours} h ${rest} min` : `${hours} h`
+}
+
+const EXTRA_PRESETS = [15, 30, 60, 120]
+
+type ExtraTimeBody = { registration_ids: string[]; mode: "add" | "set"; minutes: number; reason: string }
+type ExtraTimeResult = { changed: number; teams: { registration_id: string; extra_minutes: number; closes_at: string | null; submission_status: string }[] }
+
+function useExtraTime(stageId: string) {
+  return useAdminMutation<ExtraTimeBody, ExtraTimeResult>(
+    (body) => ({ path: `/api/admin/stages/${stageId}/extra-time`, method: "PUT", body }), [["submissions"], ["stages"]]
+  )
+}
+
+/** Minutes picker shared by the one-team and many-team controls: presets, or any number of minutes. */
+function MinutesPicker({ minutes, setMinutes }: { minutes: number; setMinutes: (value: number) => void }) {
+  return (
+    <div className="flex flex-wrap items-end gap-1.5">
+      {EXTRA_PRESETS.map((value) => (
+        <button key={value} type="button" onClick={() => setMinutes(value)}
+          className={`rounded-full border px-2.5 py-1 text-xs ${minutes === value ? "border-amber-500 bg-amber-500/10" : "border-border bg-card"}`}>
+          +{duration(value)}
+        </button>
+      ))}
+      <Field label="Minutes">
+        <TextInput type="number" min={1} max={10080} value={minutes || ""} className="w-20"
+          onChange={(event) => setMinutes(Math.max(0, Math.min(10080, Math.round(Number(event.target.value) || 0))))} />
+      </Field>
+    </div>
+  )
+}
+
+/** One team: add more time or take it away, with a reason for the audit log. */
+function ExtraTimeControls({ stageId, row, timed }: { stageId: string; row: Submission; timed: boolean }) {
+  const [minutes, setMinutes] = useState(30)
+  const [reason, setReason] = useState("")
+  const change = useExtraTime(stageId)
+  const ready = reason.trim().length >= 3 && !change.isPending
+  const cutoff = timed ? row.timer?.deadline ?? null : row.closesAt
+
+  function send(mode: "add" | "set", value: number, success: string) {
+    void notify(change.mutateAsync({ registration_ids: [row.registrationId], mode, minutes: value, reason: reason.trim() }), success, () => setReason(""))
+  }
+
+  return (
+    <div className="grid max-w-md gap-2 rounded-lg border border-border bg-card p-3">
+      <p className="inline-flex items-center gap-1 text-sm font-medium"><Clock className="size-3.5" />Extra time</p>
+      <p className="text-xs text-muted-foreground">
+        {row.extraMinutes ? `Has +${duration(row.extraMinutes)}.` : "No extra time."}
+        {cutoff ? ` Can submit until ${dateTime(cutoff)}.` : timed && row.timer?.state === "NOT_STARTED" ? " Added to its clock when it starts." : ""}
+        {row.submissionStatus === "SUBMITTED" ? " Already final: reopen it too if the team needs to edit." : ""}
+      </p>
+      <MinutesPicker minutes={minutes} setMinutes={setMinutes} />
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Reason">
+          <TextInput value={reason} maxLength={300} placeholder="Power cut at their venue" className="w-48" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+        <Button tone="amber" disabled={!ready || minutes < 1} onClick={() => send("add", minutes, `Gave ${row.teamName} ${duration(minutes)} more.`)}>
+          Add {minutes ? duration(minutes) : "time"}
+        </Button>
+        {row.extraMinutes ? (
+          <ConfirmButton confirmLabel="Remove extra time" disabled={!ready} onConfirm={() => send("set", 0, "Extra time removed.")}>Remove</ConfirmButton>
+        ) : null}
+      </div>
+      {!reason.trim() ? <p className="text-xs text-muted-foreground">A reason is needed; it goes in the audit log.</p> : null}
+    </div>
+  )
+}
+
+/** Many teams at once: every team on screen, or only the ones that have not made a final submission. */
+function BulkExtraTime({ stageId, stageName, closesAt, timed, rows, filtered, onClose }: {
+  stageId: string
+  stageName: string
+  closesAt: string | null
+  timed: boolean
+  rows: Submission[]
+  filtered: boolean
+  onClose: () => void
+}) {
+  const [scope, setScope] = useState<"open" | "all">("open")
+  const [minutes, setMinutes] = useState(30)
+  const [reason, setReason] = useState("")
+  const change = useExtraTime(stageId)
+  const targets = (scope === "open" ? rows.filter((row) => row.submissionStatus !== "SUBMITTED") : rows).map((row) => row.registrationId)
+
+  function apply() {
+    change.mutateAsync({ registration_ids: targets, mode: "add", minutes, reason: reason.trim() })
+      .then((result) => {
+        toast.success(`Gave ${result.changed} team${result.changed === 1 ? "" : "s"} ${duration(minutes)} more in ${stageName}.`)
+        setReason("")
+        onClose()
+      })
+      .catch((error: unknown) => toast.error(errorMessage(error, "The extra time could not be saved.")))
+  }
+
+  return (
+    <div role="region" aria-label="Extra time for many teams" className="mb-3 grid gap-3 rounded-lg bg-amber-500/10 p-3 text-sm">
+      <p className="text-xs text-muted-foreground">
+        Moves only these teams&apos; cut-off{timed ? " (their own clock, and the event close for them)" : ""}; everyone else keeps the event schedule
+        {closesAt ? ` (closes ${dateTime(closesAt)})` : ""}. To move the deadline for every team, edit the event under Events instead.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Teams">
+          <Select value={scope} onChange={(event) => setScope(event.target.value as typeof scope)}>
+            <option value="open">Not yet submitted{filtered ? " (shown)" : ""}</option>
+            <option value="all">Every team{filtered ? " shown" : ""}</option>
+          </Select>
+        </Field>
+        <MinutesPicker minutes={minutes} setMinutes={setMinutes} />
+        <Field label="Reason">
+          <TextInput value={reason} maxLength={300} placeholder="Portal was down for 20 minutes" className="w-56" onChange={(event) => setReason(event.target.value)} />
+        </Field>
+        <Button tone="amber" disabled={!targets.length || minutes < 1 || reason.trim().length < 3 || change.isPending} onClick={apply}>
+          {change.isPending ? "Saving…" : `Add ${minutes ? duration(minutes) : "time"} for ${targets.length} team${targets.length === 1 ? "" : "s"}`}
+        </Button>
+        <button type="button" className="text-xs underline underline-offset-2" onClick={onClose}>Cancel</button>
+      </div>
     </div>
   )
 }

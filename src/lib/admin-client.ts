@@ -169,14 +169,22 @@ export const submissionsSchema = z.object({
       track: trackRefSchema.nullable().default(null),
       track_locked_at: z.string().nullable().default(null),
       timer: z.object({
-        limit_minutes: z.number(), started_at: z.string().nullable(), deadline: z.string().nullable(),
+        limit_minutes: z.number(), extra_minutes: z.number().default(0), started_at: z.string().nullable(), deadline: z.string().nullable(),
         state: z.enum(["UNTIMED", "NOT_STARTED", "RUNNING", "EXPIRED"]),
       }).nullable().default(null),
       awards: z.array(awardSchema).default([]),
+      // Extra time organisers gave this team, and when the event closes for it (null: no close set).
+      extra_minutes: z.number().int().default(0),
+      closes_at: z.string().nullable().default(null),
+      window_state: z.enum(["NOT_OPEN", "OPEN", "CLOSED"]).nullable().default(null),
     })
   ),
   round: z.object({ id: z.string(), name: z.string(), status: z.string(), rubric_confirmed_at: z.string().nullable().default(null) }).nullable(),
-  stage: z.object({ id: z.string(), name: z.string(), eligibility: z.string() }).nullable().default(null),
+  stage: z.object({
+    id: z.string(), name: z.string(), eligibility: z.string(),
+    submission_window: z.object({ opens_at: z.string().nullable(), closes_at: z.string().nullable(), state: z.string() }).nullable().default(null),
+    time_limit_minutes: z.number().nullable().default(null),
+  }).nullable().default(null),
   tracks: z.array(trackRefSchema).default([]),
 })
 
@@ -318,8 +326,11 @@ export type Submission = {
   submissionId: string | null
   track: { id: string; title: string } | null
   trackLockedAt: string | null
-  timer: { limit_minutes: number; started_at: string | null; deadline: string | null; state: "UNTIMED" | "NOT_STARTED" | "RUNNING" | "EXPIRED" } | null
+  timer: { limit_minutes: number; extra_minutes: number; started_at: string | null; deadline: string | null; state: "UNTIMED" | "NOT_STARTED" | "RUNNING" | "EXPIRED" } | null
   awards: Award[]
+  extraMinutes: number
+  closesAt: string | null
+  windowState: "NOT_OPEN" | "OPEN" | "CLOSED" | null
 }
 
 export type Evaluation = {
@@ -460,6 +471,9 @@ export function toSubmissions(data: z.infer<typeof submissionsSchema>): Submissi
     trackLockedAt: submission.track_locked_at,
     timer: submission.timer,
     awards: submission.awards,
+    extraMinutes: submission.extra_minutes,
+    closesAt: submission.closes_at,
+    windowState: submission.window_state,
   }))
 }
 

@@ -5,6 +5,7 @@ import { Download } from "lucide-react"
 
 import { Badge, Button, Field, Notice, Select, TextArea, TextInput } from "@/components/admin/kit"
 import { useAdminMutation } from "@/lib/queries"
+import { percentShares } from "@/lib/shares"
 
 export type Criterion = { key: string; label: string; description: string; max_score: number; weight: number }
 export type RubricRound = {
@@ -47,11 +48,11 @@ function csvCell(value: string | number) {
 }
 
 function downloadRubric(round: RubricRound, criteria: Criterion[]) {
-  const total = criteria.reduce((sum, item) => sum + item.weight, 0) || 1
+  const shares = percentShares(criteria.map((item) => item.weight), 1)
   const lines = [["Key", "Criterion", "What judges look for", "Max score", "Weight", "Share of total (%)"].join(",")]
-  for (const item of criteria) {
-    lines.push([item.key, item.label, item.description, item.max_score, item.weight, ((item.weight / total) * 100).toFixed(1)].map(csvCell).join(","))
-  }
+  criteria.forEach((item, index) => {
+    lines.push([item.key, item.label, item.description, item.max_score, item.weight, shares[index].toFixed(1)].map(csvCell).join(","))
+  })
   const blob = new Blob([`﻿${lines.join("\n")}\n`], { type: "text/csv;charset=utf-8" })
   const link = document.createElement("a")
   link.href = URL.createObjectURL(blob)
@@ -82,7 +83,8 @@ export function RubricEditor({ round, rounds, editable, run }: {
   const confirmed = Boolean(round.rubric_confirmed_at)
   const valid = criteria.length > 0 && criteria.length <= 20 && new Set(criteria.map((item) => item.key)).size === criteria.length
     && criteria.every((item) => item.label.trim() && item.max_score >= 1 && item.max_score <= 100 && item.weight > 0 && item.weight <= 100)
-  const totalWeight = criteria.reduce((sum, item) => sum + (item.weight > 0 ? item.weight : 0), 0)
+  // Rounded so the hints always add up to 100%, however many metrics there are.
+  const shares = percentShares(criteria.map((item) => item.weight))
   const others = rounds.filter((item) => item.id !== round.id && item.criteria.length)
   const shapeEditable = editable && !locked
 
@@ -109,7 +111,7 @@ export function RubricEditor({ round, rounds, editable, run }: {
       ) : null}
       <div className="grid gap-3">
         {criteria.map((criterion, index) => {
-          const share = totalWeight ? ((criterion.weight > 0 ? criterion.weight : 0) / totalWeight) * 100 : 0
+          const share = shares[index]
           return (
             <div key={`${criterion.key}-${index}`} className="grid gap-2 rounded-lg border border-border p-2 sm:grid-cols-[1fr_6rem_6rem_auto] sm:items-start">
               <div className="grid gap-2">

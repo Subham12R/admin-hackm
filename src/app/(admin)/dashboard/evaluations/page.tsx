@@ -13,7 +13,7 @@ import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
-/** Raw points out of the rubric's maximum, next to the weighted percentage, across every metric. */
+/** Raw points out of the rubric's maximum, next to the percentage, across every metric. */
 function points(row: { scores: Record<string, number>; criteria: { key: string; maxScore: number }[] }) {
   const got = row.criteria.reduce((sum, criterion) => sum + (row.scores[criterion.key] ?? 0), 0)
   const max = row.criteria.reduce((sum, criterion) => sum + criterion.maxScore, 0)
@@ -44,7 +44,7 @@ export default function EvaluationsPage() {
 
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
-      <PageHeader title="Evaluations" description="Submitted scorecards. Totals are weighted percentages of each round's rubric."
+      <PageHeader title="Evaluations" description="Submitted scorecards. Totals are points earned out of the rubric's points, as a percentage (weights scale a metric's points)."
         actions={<ExportCsv datasets={["scores"]} filters={{ round_id: round !== "all" ? round : undefined }}
           ignored={term ? "The search box is not applied; the round filter is." : undefined} />} />
       <Panel

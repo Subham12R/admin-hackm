@@ -48,7 +48,7 @@ function csvCell(value: string | number) {
 }
 
 function downloadRubric(round: RubricRound, criteria: Criterion[]) {
-  const shares = percentShares(criteria.map((item) => item.weight), 1)
+  const shares = percentShares(criteria.map((item) => item.max_score * item.weight), 1)
   const lines = [["Key", "Criterion", "What judges look for", "Max score", "Weight", "Share of total (%)"].join(",")]
   criteria.forEach((item, index) => {
     lines.push([item.key, item.label, item.description, item.max_score, item.weight, shares[index].toFixed(1)].map(csvCell).join(","))
@@ -83,8 +83,8 @@ export function RubricEditor({ round, rounds, editable, run }: {
   const confirmed = Boolean(round.rubric_confirmed_at)
   const valid = criteria.length > 0 && criteria.length <= 20 && new Set(criteria.map((item) => item.key)).size === criteria.length
     && criteria.every((item) => item.label.trim() && item.max_score >= 1 && item.max_score <= 100 && item.weight > 0 && item.weight <= 100)
-  // Rounded so the hints always add up to 100%, however many metrics there are.
-  const shares = percentShares(criteria.map((item) => item.weight))
+  // A metric's share is its points (max score x weight) out of all points, rounded so the hints add up to 100%.
+  const shares = percentShares(criteria.map((item) => (item.max_score > 0 ? item.max_score : 0) * item.weight))
   const others = rounds.filter((item) => item.id !== round.id && item.criteria.length)
   const shapeEditable = editable && !locked
 

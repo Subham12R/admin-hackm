@@ -13,6 +13,13 @@ import { dateTime, errorMessage } from "@/lib/api"
 import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
 import { notify } from "@/lib/notify"
 
+/** Raw points out of the rubric's maximum, next to the weighted percentage, across every metric. */
+function points(row: { scores: Record<string, number>; criteria: { key: string; maxScore: number }[] }) {
+  const got = row.criteria.reduce((sum, criterion) => sum + (row.scores[criterion.key] ?? 0), 0)
+  const max = row.criteria.reduce((sum, criterion) => sum + criterion.maxScore, 0)
+  return `${got} / ${max}`
+}
+
 export default function EvaluationsPage() {
   const canReopen = can.assign(useRoles())
   const evaluations = useQuery({
@@ -86,7 +93,10 @@ export default function EvaluationsPage() {
                   )) : (
                     <TableCell className="text-xs">{row.criteria.map((criterion) => `${criterion.label}: ${row.scores[criterion.key] ?? "—"}`).join(" · ")}</TableCell>
                   )}
-                  <TableCell className="text-center"><Badge tone="green">{row.total.toFixed(1)}%</Badge></TableCell>
+                  <TableCell className="text-center">
+                    <Badge tone="green">{row.total.toFixed(1)}%</Badge>
+                    <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">{points(row)} pts</p>
+                  </TableCell>
                   <TableCell className="text-xs">{dateTime(row.evaluatedAt)}</TableCell>
                   <TableCell className="text-right">
                     {canReopen ? (

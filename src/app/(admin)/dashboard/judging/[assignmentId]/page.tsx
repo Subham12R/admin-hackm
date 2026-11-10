@@ -46,10 +46,11 @@ function ScoreForm({ data }: { data: Detail }) {
   const parsed = Object.fromEntries(Object.entries(scores).filter(([, value]) => value !== "").map(([key, value]) => [key, Number(value)]))
   const invalid = data.criteria.filter((criterion) => criterion.key in parsed && (!Number.isInteger(parsed[criterion.key]) || parsed[criterion.key] < 0 || parsed[criterion.key] > criterion.max_score))
   const complete = data.criteria.every((criterion) => criterion.key in parsed) && !invalid.length
-  const weight = data.criteria.reduce((sum, criterion) => sum + criterion.weight, 0)
   const points = data.criteria.reduce((sum, criterion) => sum + (Number.isFinite(parsed[criterion.key]) ? parsed[criterion.key] : 0), 0)
   const maxPoints = data.criteria.reduce((sum, criterion) => sum + criterion.max_score, 0)
-  const preview = weight ? data.criteria.reduce((sum, criterion) => sum + ((parsed[criterion.key] ?? 0) / criterion.max_score) * criterion.weight, 0) / weight * 100 : 0
+  const weighted = data.criteria.reduce((sum, criterion) => sum + criterion.max_score * criterion.weight, 0)
+  const earned = data.criteria.reduce((sum, criterion) => sum + (Number.isFinite(parsed[criterion.key]) ? parsed[criterion.key] : 0) * criterion.weight, 0)
+  const preview = weighted ? (earned / weighted) * 100 : 0
 
   function run(promise: Promise<unknown>, success: string) {
     void notify(promise, success)

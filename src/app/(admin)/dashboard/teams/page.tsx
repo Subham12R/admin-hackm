@@ -12,16 +12,16 @@ import { BarXAxis } from "@/components/charts/bar-x-axis"
 import { Grid } from "@/components/charts/grid"
 import { ChartTooltip } from "@/components/charts/tooltip"
 import { RichButton } from "@/components/rich-button"
-import { Badge, RegistrationBadge, StatusBadge } from "@/components/admin/kit"
+import { Badge, ConfirmButton, RegistrationBadge, Select, StatusBadge } from "@/components/admin/kit"
 import { SearchBox } from "@/components/admin/search-box"
 import { EmailMatching, EmailSelected } from "@/components/admin/email-teams"
 import { ExportCsv } from "@/components/admin/export-csv"
 import { useTableSearch } from "@/hooks/use-table-search"
 import { REGISTRATION_AREAS, RegistrationDrawer } from "@/components/admin/registration-drawer"
 import { FinalsDecisions } from "@/components/admin/finals-decisions"
-import { rupees } from "@/lib/api"
+import { errorMessage, rupees } from "@/lib/api"
 import { can, keys, useAdminMutation, useRoles } from "@/lib/queries"
-import { notify } from "@/lib/notify"
+import { notify, toast } from "@/lib/notify"
 import {
   adminQuery,
   registrationCategories,
@@ -139,6 +139,7 @@ export default function TeamsPage() {
   const roles = useRoles()
   const canReview = can.review(roles)
   const canEmail = can.eventControl(roles)
+  const selectable = canEmail || canReview
   const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [openRegistration, setOpenRegistration] = useState<string | null>(null)
   const [date, setDate] = useState<Date>()
@@ -190,7 +191,7 @@ export default function TeamsPage() {
     selectedColumns.includes(column.key)
   )
   const chosen = visibleRegistrations.filter((registration) => selected.has(registration.registrationId)).map((registration) => registration.registrationId)
-  const span = visibleColumns.length + 1 + (canEmail ? 1 : 0)
+  const span = visibleColumns.length + 1 + (selectable ? 1 : 0)
 
   function toggle(id: string, checked: boolean) {
     setSelected((current) => {
@@ -434,10 +435,11 @@ export default function TeamsPage() {
             </div>
           </div>
 
-          {canEmail && chosen.length ? (
+          {selectable && chosen.length ? (
             <div role="region" aria-label="Selected teams" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
               <span className="font-medium">{chosen.length} selected</span>
-              <EmailSelected ids={chosen} />
+              {canEmail ? <EmailSelected ids={chosen} /> : null}
+              {canReview ? <TeamBulkActions ids={chosen} onDone={() => setSelected(new Set())} /> : null}
               <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
             </div>
           ) : null}
@@ -447,7 +449,7 @@ export default function TeamsPage() {
             </TableCaption>
             <TableHeader>
               <TableRow>
-                {canEmail ? (
+                {selectable ? (
                   <TableHead className="h-10 w-8">
                     <input type="checkbox" aria-label="Select all on this page"
                       checked={visibleRegistrations.length > 0 && chosen.length === visibleRegistrations.length}
@@ -484,14 +486,14 @@ export default function TeamsPage() {
                   return (
                     <Fragment key={registration.registrationId}>
                       <TableRow className={reviewTint(registration)?.row}>
-                        {canEmail ? (
+                        {selectable ? (
                           <TableCell className={`w-8 ${reviewTint(registration)?.bar ?? ""}`}>
                             <input type="checkbox" aria-label={`Select ${registration.teamName}`} checked={selected.has(registration.registrationId)}
                               onChange={(event) => toggle(registration.registrationId, event.target.checked)} />
                           </TableCell>
                         ) : null}
                         {visibleColumns.map((column, columnIndex) => (
-                          <TableCell key={column.key} className={`${column.className ?? ""} ${columnIndex === 0 && !canEmail ? reviewTint(registration)?.bar ?? "" : ""}`}>
+                          <TableCell key={column.key} className={`${column.className ?? ""} ${columnIndex === 0 && !selectable ? reviewTint(registration)?.bar ?? "" : ""}`}>
                             {column.render(registration)}
                           </TableCell>
                         ))}
@@ -677,4 +679,51 @@ const REVIEW_TINTS = {
 
 function reviewTint(team: Registration) {
   return team.status === "PAID" ? REVIEW_TINTS[team.review.status] : undefined
+}
+
+type BulkTeamsResult = { changed: number; unchanged: number; skipped?: { registration_id: string; team_name: string | null; reason: string }[] }
+
+/** One finals decision or details review for every selected team; teams it cannot apply to are listed. */
+function TeamBulkActions({ ids, onDone }: { ids: string[]; onDone: () => void }) {
+  const [action, setAction] = useState("")
+  const areas = [...REGISTRATION_AREAS, ["checkins"], ["finals"]]
+  const finals = useAdminMutation<{ registration_ids: string[]; status: TeamFinals["status"] }, BulkTeamsResult>((body) => ({ path: "/api/admin/teams/bulk-finals", body }), areas)
+  const review = useAdminMutation<{ registration_ids: string[]; status: string }, BulkTeamsResult>((body) => ({ path: "/api/admin/teams/bulk-review", body }), areas)
+  const [kind, status] = action.split(":")
+  const busy = finals.isPending || review.isPending
+
+  function run() {
+    const request = kind === "finals"
+      ? finals.mutateAsync({ registration_ids: ids, status: status as TeamFinals["status"] })
+      : review.mutateAsync({ registration_ids: ids, status })
+    void request.then((result) => {
+      const skipped = result.skipped ?? []
+      const message = `${result.changed} team${result.changed === 1 ? "" : "s"} updated${result.unchanged ? `, ${result.unchanged} already set` : ""}.`
+      if (skipped.length) toast.error(`${message} Skipped ${skipped.length}: ${skipped.slice(0, 5).map((item) => `${item.team_name ?? "team"} (${item.reason})`).join("; ")}${skipped.length > 5 ? "…" : ""}`)
+      else toast.success(message)
+      setAction("")
+      onDone()
+    }).catch((error: unknown) => toast.error(errorMessage(error, "The bulk update failed.")))
+  }
+
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <Select aria-label="Bulk action for selected teams" value={action} onChange={(event) => setAction(event.target.value)}>
+        <option value="">Set for selected…</option>
+        <optgroup label="Finals">
+          <option value="finals:ACCEPTED">Accept for the finals</option>
+          <option value="finals:DECLINED">Mark not selected</option>
+          <option value="finals:PENDING">Clear finals decision</option>
+        </optgroup>
+        <optgroup label="Details review">
+          <option value="review:VERIFIED">Mark verified</option>
+          <option value="review:DECLINED">Mark declined</option>
+          <option value="review:PENDING">Back to pending</option>
+        </optgroup>
+      </Select>
+      {action ? (
+        <ConfirmButton tone="green" confirmLabel={`Apply to ${ids.length}`} disabled={busy} onConfirm={run}>Apply</ConfirmButton>
+      ) : null}
+    </span>
+  )
 }

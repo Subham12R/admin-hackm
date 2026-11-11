@@ -9,7 +9,7 @@ import { SubmissionFormBuilder } from "@/components/admin/submission-form-builde
 import { ApiError, dateTime, errorMessage, fromLocalInput, toLocalInput } from "@/lib/api"
 import { notify, toast } from "@/lib/notify"
 import { can, useAdminMutation, useRoles } from "@/lib/queries"
-import { ELIGIBILITY, useStages, type Resource, type Stage, type Track } from "@/lib/stages"
+import { ELIGIBILITY, STATEMENT_MODES, TIMER_STARTS, useStages, type Resource, type Stage, type StatementMode, type TimerStart, type Track } from "@/lib/stages"
 
 const AREAS = [["stages"], ["submissions"], ["event"], ["challenge"]]
 const LINK = /^https?:\/\/\S+$/
@@ -84,6 +84,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   const [initial] = useState(() => ({
     name: stage.name, description: stage.description, eligibility: stage.eligibility, schedule: scheduleOf(stage),
     hours: stage.time_limit_minutes ? String(stage.time_limit_minutes / 60) : "",
+    mode: (stage.statement_mode ?? "REVEAL") as StatementMode, timerStart: (stage.timer_start ?? "REVEAL") as TimerStart,
   }))
   const [form, setForm] = useState(initial)
   const save = useAdminMutation<Record<string, unknown>>((body) => ({ path: `/api/admin/stages/${stage.id}`, method: "PATCH", body }), AREAS)
@@ -98,8 +99,15 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   const hoursNumber = Number(form.hours)
   const hoursError = form.hours.trim() && (!Number.isFinite(hoursNumber) || hoursNumber < 1 || hoursNumber > 336 || !Number.isInteger(hoursNumber * 4))
     ? "Between 1 and 336 hours, in quarter hours" : ""
+  // A team's clock never runs past the event, so the limit can't be longer than open to close.
+  const opens = form.schedule.submission_opens_at ? Date.parse(fromLocalInput(form.schedule.submission_opens_at) ?? "") : NaN
+  const closes = form.schedule.submission_closes_at ? Date.parse(fromLocalInput(form.schedule.submission_closes_at) ?? "") : NaN
+  const windowHours = Number.isFinite(opens) && Number.isFinite(closes) ? (closes - opens) / 3_600_000 : null
+  const limitError = hoursError || (form.hours.trim() && windowHours !== null && hoursNumber > windowHours
+    ? `Longer than the event itself (${Math.floor(windowHours * 4) / 4} h from open to close)` : "")
+  const timerError = form.timerStart === "OPEN" && !form.schedule.submission_opens_at ? "Set when submissions open; every team's clock starts then." : ""
   const dirty = form.name !== initial.name || form.description !== initial.description || form.eligibility !== initial.eligibility || changedTimes.length > 0
-    || form.hours.trim() !== initial.hours
+    || form.hours.trim() !== initial.hours || form.mode !== initial.mode || form.timerStart !== initial.timerStart
 
   function submit() {
     const body: Record<string, unknown> = {}
@@ -108,6 +116,8 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
     if (form.eligibility !== initial.eligibility) body.eligibility = form.eligibility
     for (const [key] of changedTimes) body[key] = fromLocalInput(form.schedule[key])
     if (form.hours.trim() !== initial.hours) body.time_limit_minutes = form.hours.trim() ? Math.round(hoursNumber * 60) : null
+    if (form.mode !== initial.mode) body.statement_mode = form.mode
+    if (form.timerStart !== initial.timerStart) body.timer_start = form.timerStart
     void notify(save.mutateAsync(body), "Event saved. The server enforces the new times now.")
   }
 
@@ -115,7 +125,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   return (
     <Panel
       title={stage.name}
-      description={`${ELIGIBILITY[stage.eligibility]} · ${stage.teams} teams${stage.time_limit_minutes ? ` · ${stage.time_limit_minutes / 60}h per team · ${stage.started ?? 0} started` : ""} · ${stage.submitted} submitted · ${stage.drafts} drafts${stage.awards ? ` · ${stage.awards} placings` : ""}`}
+      description={`${ELIGIBILITY[stage.eligibility]} · ${stage.teams} teams${stage.time_limit_minutes ? ` · ${stage.time_limit_minutes / 60}h per team · ${stage.timer_start === "OPEN" ? "clock starts at open" : `${stage.started ?? 0} started`}` : ""} · ${stage.submitted} submitted · ${stage.drafts} drafts${stage.awards ? ` · ${stage.awards} placings` : ""}`}
       actions={
         <span className="flex flex-wrap items-center gap-2">
           <Badge tone={stage.published ? "green" : "zinc"}>{stage.published ? "visible to teams" : "hidden"}</Badge>
@@ -156,14 +166,30 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
               </span>
             </Field>
           ))}
-          <Field label="Time limit per team (hours)" error={hoursError || undefined}
-            hint={hoursError ? undefined : form.hours.trim() !== initial.hours ? "Unsaved change" : "Empty = no limit. Each team starts its own clock once the statements are out; a team starting late only gets the time left before submissions close."}>
+          <Field label="Time limit per team (hours)" error={limitError || undefined}
+            hint={limitError ? undefined : form.hours.trim() !== initial.hours ? "Unsaved change" : form.timerStart === "OPEN"
+              ? "Empty = no limit. Every team's clock starts when submissions open and never runs past the close."
+              : "Empty = no limit. Each team starts its own clock once the statements are out; a team starting late only gets the time left before submissions close."}>
             <TextInput type="number" inputMode="decimal" min={1} max={336} step={0.25} value={form.hours} disabled={!editable} placeholder="48"
               onChange={(event) => setForm({ ...form, hours: event.target.value })} />
           </Field>
+          <Field label="Problem statements" hint={form.mode !== initial.mode ? "Unsaved change" : form.mode === "SELECT"
+            ? "Teams see every statement as soon as the event is visible. The leader picks one; no reveal time is used."
+            : "Hidden until the reveal time above."}>
+            <Select value={form.mode} disabled={!editable} onChange={(event) => setForm({ ...form, mode: event.target.value as StatementMode })}>
+              {Object.entries(STATEMENT_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
+          <Field label="Timer starts" error={timerError || undefined} hint={timerError ? undefined : form.timerStart !== initial.timerStart ? "Unsaved change" : form.timerStart === "OPEN"
+            ? "The countdown runs from when submissions open, whatever the reveal time. No start button for teams."
+            : "The countdown follows the reveal; in a timed event each team starts its own clock."}>
+            <Select value={form.timerStart} disabled={!editable} onChange={(event) => setForm({ ...form, timerStart: event.target.value as TimerStart })}>
+              {Object.entries(TIMER_STARTS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </Field>
           {editable ? (
             <div className="flex flex-wrap items-end gap-2 md:col-span-2">
-              <Button tone="green" type="submit" disabled={!dirty || !form.name.trim() || Boolean(hoursError) || save.isPending}>{save.isPending ? "Saving…" : "Save event"}</Button>
+              <Button tone="green" type="submit" disabled={!dirty || !form.name.trim() || Boolean(limitError) || Boolean(timerError) || save.isPending}>{save.isPending ? "Saving…" : "Save event"}</Button>
               {dirty ? <Button onClick={() => setForm(initial)}>Discard changes</Button> : null}
               {!only && !hasWork ? (
                 <ConfirmButton confirmLabel="Delete event" disabled={remove.isPending}
@@ -195,15 +221,17 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             <div className="min-w-0 flex-[1_1_16rem]">
               <p className="font-medium">Problem statements</p>
               <p className="text-xs text-muted-foreground">
-                {stage.statements.released
-                  ? stage.time_limit_minutes ? "Out now: each team sees them when it starts its own clock." : "Teams can read these now."
+                {stage.statement_mode === "SELECT"
+                  ? "Selectable: teams see all of them from the start and the leader picks one."
+                  : stage.statements.released
+                  ? stage.time_limit_minutes && stage.timer_start !== "OPEN" ? "Out now: each team sees them when it starts its own clock." : "Teams can read these now."
                   : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}${stage.time_limit_minutes ? "; from then each team can start its clock" : ""}.` : "Hidden from teams until you set a reveal time or reveal them now."}
                 {stage.tracks.length > 1 ? " Each team locks one before it can start its project; only organisers can change it after that." : ""}
               </p>
             </div>
             {editable ? (
               <span className="flex max-w-full flex-wrap gap-1">
-              {!stage.statements.released && stage.tracks.length ? (
+              {!stage.statements.released && stage.statement_mode !== "SELECT" && stage.tracks.length ? (
                 <ConfirmButton tone="green" confirmLabel="Show them to teams now" disabled={save.isPending}
                   onConfirm={() => void notify(save.mutateAsync({ statements_release_at: new Date().toISOString() }), "Problem statements revealed.")}>
                   Reveal now

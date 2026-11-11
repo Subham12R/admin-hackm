@@ -24,6 +24,10 @@ export type Stage = {
   // Per-team time limit: each team gets this long from when it starts, never past submissions closing.
   time_limit_minutes?: number | null
   started?: number
+  // REVEAL: statements unlock at the reveal time. SELECT: all are visible from the start and the team leader picks one.
+  statement_mode?: StatementMode
+  // REVEAL: the clock follows the reveal (each timed team starts its own). OPEN: it starts for every team when submissions open.
+  timer_start?: TimerStart
   tracks: Track[]
   updated_at: string | null
   completed_at: string | null
@@ -31,6 +35,19 @@ export type Stage = {
   drafts: number
   submitted: number
   awards: number
+}
+
+export type StatementMode = "REVEAL" | "SELECT"
+export type TimerStart = "REVEAL" | "OPEN"
+
+export const STATEMENT_MODES: Record<StatementMode, string> = {
+  REVEAL: "Reveal at a set time",
+  SELECT: "Selectable: all visible, leader picks one",
+}
+
+export const TIMER_STARTS: Record<TimerStart, string> = {
+  REVEAL: "With the reveal (team starts its clock)",
+  OPEN: "When submissions open, for every team",
 }
 
 export const ELIGIBILITY: Record<Stage["eligibility"], string> = {

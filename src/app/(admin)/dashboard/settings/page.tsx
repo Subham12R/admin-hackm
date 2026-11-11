@@ -54,7 +54,7 @@ function PasswordPanel({ email, roles }: { email?: string; roles: string[] }) {
 
   return (
     <Panel title="Your account" description={email ? `${email} · ${roles.map((role) => role.replaceAll("_", " ").toLowerCase()).join(", ")}` : undefined}>
-      <form className="grid gap-3" onSubmit={(event) => { event.preventDefault(); if (valid) void submit() }}>
+      <form method="post" className="grid gap-3" onSubmit={(event) => { event.preventDefault(); if (valid) void submit() }}>
         <div className="grid gap-3 sm:grid-cols-3 sm:items-start">
           <Field label="Current password"><TextInput type="password" autoComplete="current-password" value={form.current} onChange={(event) => setForm({ ...form, current: event.target.value })} /></Field>
           <Field label="New password" hint="At least 8 characters" error={form.next && form.next.length < 8 ? "At least 8 characters" : undefined}>

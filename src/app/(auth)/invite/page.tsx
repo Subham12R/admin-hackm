@@ -39,7 +39,7 @@ function InviteForm() {
     )
   }
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form method="post" onSubmit={submit} className="space-y-3">
       <label className="flex flex-col gap-1 text-xs text-muted-foreground">
         Choose a password (at least 8 characters)
         <input type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} className="h-9 rounded-md border border-zinc-200 px-2 text-sm text-zinc-900" />

@@ -29,7 +29,7 @@ function localInput(iso: string | null) {
  */
 export function FinalsDecisions({ canRelease }: { canRelease: boolean }) {
   const overview = useAdminQuery<Overview>(["finals"], "/api/admin/finals", { refetchInterval: 30_000 })
-  const release = useAdminMutation<{ rsvp_closes_at?: string }, { released: { ACCEPTED: number; DECLINED: number }; emails: number }>(
+  const release = useAdminMutation<{ rsvp_closes_at?: string; send_emails?: boolean }, { released: { ACCEPTED: number; DECLINED: number }; emails: number }>(
     (body) => ({ path: "/api/admin/finals/release", body }),
     AREAS
   )
@@ -42,7 +42,7 @@ export function FinalsDecisions({ canRelease }: { canRelease: boolean }) {
 
   return (
     <Panel title="Finals decisions"
-      description="Accept or reject teams in the table below; nothing is sent until you release. Accepted leaders get Confirm / Can't make it buttons.">
+      description="Accept or reject teams in the table below; teams see nothing until you release. Send emails, or release without email if you tell teams another way. Accepted leaders RSVP from the email or their dashboard.">
       {overview.isError ? <Notice tone="red">{errorMessage(overview.error, "Finals overview could not be loaded.")}</Notice> : null}
       {data ? (
         <div className="flex flex-col gap-4">
@@ -69,6 +69,20 @@ export function FinalsDecisions({ canRelease }: { canRelease: boolean }) {
                   () => setDeadline(null)
                 )}>
                 {pending ? `Send decision emails (${pending})` : "All decisions sent"}
+              </ConfirmButton>
+              {/* For decisions told another way (a broadcast, WhatsApp): teams' dashboards update, nobody is emailed. */}
+              <ConfirmButton tone="zinc"
+                confirmLabel={`Release ${data.unreleased.ACCEPTED} acceptance${data.unreleased.ACCEPTED === 1 ? "" : "s"} and ${data.unreleased.DECLINED} rejection${data.unreleased.DECLINED === 1 ? "" : "s"} without email`}
+                disabled={!pending || release.isPending}
+                onConfirm={() => void notify(
+                  release.mutateAsync({
+                    send_emails: false,
+                    ...(deadlineValue && (deadlineChanged || !data.rsvp_closes_at) ? { rsvp_closes_at: new Date(deadlineValue).toISOString() } : {}),
+                  }),
+                  "Decisions released without email; accepted teams now see the finals on their dashboard.",
+                  () => setDeadline(null)
+                )}>
+                {pending ? `Release without email (${pending})` : "Nothing to release"}
               </ConfirmButton>
             </div>
           ) : null}

@@ -36,8 +36,6 @@ export type Stage = {
   updated_at: string | null
   completed_at: string | null
   teams: number
-  // Finalists-only events: teams accepted but not emailed yet, who can't see the event until decisions are sent.
-  teams_not_notified?: number
   drafts: number
   submitted: number
   awards: number

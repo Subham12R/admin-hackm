@@ -148,13 +148,6 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
       }
     >
       <div className="grid min-w-0 grid-cols-1 gap-4">
-        {stage.eligibility === "FINALISTS" && stage.teams_not_notified ? (
-          <Notice tone="amber">
-            {stage.teams_not_notified === stage.teams ? `None of the ${stage.teams} accepted teams have` : `${stage.teams_not_notified} of the ${stage.teams} accepted teams haven't`}{" "}
-            been emailed their finals decision yet, so they can&apos;t see this event on their dashboard.{" "}
-            Send the decision emails from <Link href="/dashboard/teams" className="underline">Teams → Finals decisions</Link>.
-          </Notice>
-        ) : null}
         <form className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (editable && dirty) submit() }}>
           <Field label="Name">
             <TextInput value={form.name} disabled={!editable} maxLength={200} onChange={(event) => setForm({ ...form, name: event.target.value })} />

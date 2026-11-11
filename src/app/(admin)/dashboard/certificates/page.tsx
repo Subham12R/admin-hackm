@@ -21,6 +21,7 @@ import {
   type IssuedCredential,
   type LayoutField,
 } from "@/lib/credentials"
+import { filesOf, saveBlob, ZIP_FORMATS, zipCredentials, zipName, type CredentialLite, type ZipFormat } from "@/lib/credential-zip"
 import { notify, toast } from "@/lib/notify"
 import { can, keys, useAdminMutation, useAdminQuery, useRoles } from "@/lib/queries"
 import { useStages, type Stage } from "@/lib/stages"
@@ -667,15 +668,19 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
   const [status, setStatus] = useState("")
   const [q, setQ] = useState("")
   const [page, setPage] = useState(1)
-  const [picked, setPicked] = useState<Set<string>>(new Set())
+  // Ticked credentials, kept across pages with what bulk actions need to know about each.
+  const [picked, setPicked] = useState<Map<string, CredentialLite>>(new Map())
   const [expanded, setExpanded] = useState<string | null>(null)
-  const search = new URLSearchParams({ page: String(page) })
+  const [selectingAll, setSelectingAll] = useState(false)
+  const filters = new URLSearchParams()
   // A badge may be hackathon-wide (no event), so a chosen badge or type is filtered on its own.
-  if (target.startsWith("cert:")) search.set("certificate_type_id", target.slice(5))
-  else if (target.startsWith("badge:")) search.set("badge_definition_id", target.slice(6))
-  else search.set("stage_id", stage.id)
-  if (status) search.set("status", status)
-  if (q.trim()) search.set("q", q.trim())
+  if (target.startsWith("cert:")) filters.set("certificate_type_id", target.slice(5))
+  else if (target.startsWith("badge:")) filters.set("badge_definition_id", target.slice(6))
+  else filters.set("stage_id", stage.id)
+  if (status) filters.set("status", status)
+  if (q.trim()) filters.set("q", q.trim())
+  const search = new URLSearchParams(filters)
+  search.set("page", String(page))
   const list = useQuery({
     queryKey: keys.credentials(search.toString()),
     queryFn: ({ signal }) => api<{ total: number; page: number; page_size: number; items: IssuedCredential[] }>(`/api/admin/credentials?${search.toString()}`, { signal }),
@@ -684,15 +689,46 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
   })
   const publish = useAdminMutation<Record<string, unknown>, { published: number; not_ready: number; emailed: number }>((body) => ({ path: "/api/admin/credentials/publish", body }), AREAS)
   const items = list.data?.items ?? []
-  const drafts = items.filter((item) => item.status === "DRAFT")
-  const selected = drafts.filter((item) => picked.has(item.id))
   const pages = list.data ? Math.max(1, Math.ceil(list.data.total / list.data.page_size)) : 1
-  const blockedByCompletion = !stage.completed_at && (selected.some((item) => item.kind === "CERTIFICATE") || target.startsWith("cert:"))
+  const chosen = [...picked.values()]
+  const chosenDrafts = chosen.filter((item) => item.status === "DRAFT")
+  const blockedByCompletion = !stage.completed_at && (chosenDrafts.some((item) => item.kind === "CERTIFICATE") || target.startsWith("cert:"))
+  const pageTicked = items.length > 0 && items.every((item) => picked.has(item.id))
+
+  function changeFilters(apply: () => void) {
+    apply()
+    setPage(1)
+    setPicked(new Map())
+  }
+
+  function tick(rows: CredentialLite[], on: boolean) {
+    setPicked((current) => {
+      const next = new Map(current)
+      for (const row of rows) {
+        if (on) next.set(row.id, row)
+        else next.delete(row.id)
+      }
+      return next
+    })
+  }
+
+  async function selectAllMatching() {
+    setSelectingAll(true)
+    try {
+      const manifest = await api<{ total: number; truncated: boolean; items: CredentialLite[] }>(`/api/admin/credentials/manifest?${filters.toString()}`)
+      setPicked(new Map(manifest.items.map((item) => [item.id, item])))
+      if (manifest.truncated) toast.error(`Only the first ${manifest.items.length} of ${manifest.total} could be selected; narrow the filters for the rest.`)
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not select everything that matches."))
+    } finally {
+      setSelectingAll(false)
+    }
+  }
 
   function runPublish(body: Record<string, unknown>) {
     void publish.mutateAsync(body).then((result) => {
       toast.success(`${result.published} published, ${result.emailed} people emailed${result.not_ready ? `; ${result.not_ready} still being drawn, publish them again shortly` : ""}.`)
-      setPicked(new Set())
+      setPicked(new Map())
     }).catch((error) => toast.error(errorMessage(error)))
   }
 
@@ -700,30 +736,24 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
     <Panel
       title="Issued credentials"
       description={list.data ? `${list.data.total} total` : undefined}
-      actions={editable ? (
-        <span className="flex flex-wrap items-center gap-2">
-          <ConfirmButton tone="green" confirmLabel={`Publish ${selected.length} and email`} disabled={!selected.length || publish.isPending}
-            onConfirm={() => runPublish({ ids: selected.map((item) => item.id) })}>Publish selected ({selected.length})</ConfirmButton>
-          {target ? (
-            <ConfirmButton tone="green" confirmLabel="Publish every draft and email" disabled={publish.isPending}
-              onConfirm={() => runPublish(target.startsWith("cert:") ? { certificate_type_id: target.slice(5) } : { badge_definition_id: target.slice(6) })}>
-              Publish all drafts of this {target.startsWith("cert:") ? "type" : "badge"}
-            </ConfirmButton>
-          ) : null}
-        </span>
+      actions={editable && target ? (
+        <ConfirmButton tone="green" confirmLabel="Publish every draft and email" disabled={publish.isPending}
+          onConfirm={() => runPublish(target.startsWith("cert:") ? { certificate_type_id: target.slice(5) } : { badge_definition_id: target.slice(6) })}>
+          Publish all drafts of this {target.startsWith("cert:") ? "type" : "badge"}
+        </ConfirmButton>
       ) : null}
     >
       <div className="flex flex-col gap-3">
         <div className="grid items-start gap-3 md:grid-cols-3">
           <Field label="Show">
-            <Select value={target} onChange={(event) => { setTarget(event.target.value as TargetValue); setPage(1); setPicked(new Set()) }}>
+            <Select value={target} onChange={(event) => changeFilters(() => setTarget(event.target.value as TargetValue))}>
               <option value="">Everything in {stage.name}</option>
               {types.length ? <optgroup label="Certificates">{types.map((item) => <option key={item.id} value={`cert:${item.id}`}>{item.name}</option>)}</optgroup> : null}
               {badges.length ? <optgroup label="Badges">{badges.map((item) => <option key={item.id} value={`badge:${item.id}`}>{item.name}</option>)}</optgroup> : null}
             </Select>
           </Field>
           <Field label="Status">
-            <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }}>
+            <Select value={status} onChange={(event) => changeFilters(() => setStatus(event.target.value))}>
               <option value="">Any</option>
               <option value="DRAFT">Drafts</option>
               <option value="PUBLISHED">Published</option>
@@ -731,9 +761,21 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
             </Select>
           </Field>
           <Field label="Search name, email, team or credential ID">
-            <TextInput value={q} maxLength={200} onChange={(event) => { setQ(event.target.value); setPage(1) }} />
+            <TextInput value={q} maxLength={200} onChange={(event) => changeFilters(() => setQ(event.target.value))} />
           </Field>
         </div>
+        {chosen.length ? (
+          <IssuedBulkBar chosen={chosen} editable={editable} publishing={publish.isPending} blockedByCompletion={blockedByCompletion}
+            onPublish={() => runPublish({ ids: chosenDrafts.map((item) => item.id) })} onDone={() => setPicked(new Map())} />
+        ) : null}
+        {list.data && list.data.total > items.length && pageTicked && picked.size < list.data.total ? (
+          <p className="text-xs text-muted-foreground">
+            All {items.length} on this page are ticked.{" "}
+            <button type="button" className="underline" disabled={selectingAll} onClick={() => void selectAllMatching()}>
+              {selectingAll ? "Selecting…" : `Select all ${list.data.total} that match`}
+            </button>
+          </p>
+        ) : null}
         {blockedByCompletion ? <Notice tone="amber">{stage.name} is not marked completed, so its certificates cannot be published yet. Badges can.</Notice> : null}
         {list.isError ? <Notice tone="red">{errorMessage(list.error, "Credentials could not be loaded.")}</Notice> : null}
         {list.isLoading ? <LoadingRows /> : items.length ? (
@@ -741,9 +783,8 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8">
-                  <input type="checkbox" aria-label="Tick every draft on this page" disabled={!drafts.length || !editable}
-                    checked={drafts.length > 0 && selected.length === drafts.length}
-                    onChange={(event) => setPicked(event.target.checked ? new Set(drafts.map((item) => item.id)) : new Set())} />
+                  <input type="checkbox" aria-label="Tick everything on this page" checked={pageTicked}
+                    onChange={(event) => tick(items, event.target.checked)} />
                 </TableHead>
                 <TableHead>Credential</TableHead>
                 <TableHead>Recipient</TableHead>
@@ -755,7 +796,7 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
             <TableBody>
               {items.map((item) => (
                 <CredentialRow key={item.id} item={item} editable={editable} picked={picked.has(item.id)} expanded={expanded === item.id}
-                  onPick={(on) => setPicked((current) => { const next = new Set(current); if (on) next.add(item.id); else next.delete(item.id); return next })}
+                  onPick={(on) => tick([item], on)}
                   onExpand={() => setExpanded(expanded === item.id ? null : item.id)} />
               ))}
             </TableBody>
@@ -770,6 +811,86 @@ function IssuedTab({ stage, types, badges, editable }: { stage: Stage; types: Ce
         ) : null}
       </div>
     </Panel>
+  )
+}
+
+function IssuedBulkBar({ chosen, editable, publishing, blockedByCompletion, onPublish, onDone }: {
+  chosen: CredentialLite[]
+  editable: boolean
+  publishing: boolean
+  blockedByCompletion: boolean
+  onPublish: () => void
+  onDone: () => void
+}) {
+  const [format, setFormat] = useState<ZipFormat>("pdf")
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [reason, setReason] = useState("")
+  const drafts = chosen.filter((item) => item.status === "DRAFT")
+  const published = chosen.filter((item) => item.status === "PUBLISHED")
+  const revoked = chosen.length - drafts.length - published.length
+  const downloadable = chosen.filter((item) => filesOf(item, format).length)
+  const remove = useAdminMutation<string[], { deleted: number; skipped: number }>((ids) => ({ path: "/api/admin/credentials/bulk-delete", body: { ids } }), AREAS)
+  const revoke = useAdminMutation<{ ids: string[]; reason: string }, { revoked: number; skipped: number }>((body) => ({ path: "/api/admin/credentials/bulk-revoke", body }), AREAS)
+  const busy = publishing || remove.isPending || revoke.isPending
+
+  async function download() {
+    setProgress({ done: 0, total: 1 })
+    try {
+      const result = await zipCredentials(chosen, format, (done, total) => setProgress({ done, total }))
+      saveBlob(result.blob, zipName("hackmatrix-credentials"))
+      toast.success(result.missing ? `ZIP saved; ${result.missing} file${result.missing === 1 ? " is" : "s are"} missing (see missing.txt inside).` : `ZIP saved with ${result.files} file${result.files === 1 ? "" : "s"}.`)
+    } catch {
+      toast.error("The ZIP could not be made. Try fewer credentials at a time.")
+    } finally {
+      setProgress(null)
+    }
+  }
+
+  return (
+    <div role="region" aria-label="Bulk actions" className="grid gap-3 rounded-lg bg-muted/60 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">{chosen.length} selected</span>
+        <span className="text-xs text-muted-foreground">{drafts.length} draft{drafts.length === 1 ? "" : "s"} · {published.length} published{revoked ? ` · ${revoked} revoked` : ""}</span>
+        <Button onClick={onDone}>Clear</Button>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Files">
+          <Select value={format} onChange={(event) => setFormat(event.target.value as ZipFormat)}>
+            {Object.entries(ZIP_FORMATS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+        </Field>
+        <Button tone="green" disabled={!downloadable.length || Boolean(progress)} onClick={() => void download()}>
+          {progress ? `Zipping ${progress.done}/${progress.total}…` : `Download ZIP (${downloadable.length})`}
+        </Button>
+        {editable && drafts.length ? (
+          <>
+            <ConfirmButton tone="green" confirmLabel={`Publish ${drafts.length} and email`} disabled={!drafts.length || busy || blockedByCompletion}
+              onConfirm={onPublish}>Publish drafts ({drafts.length})</ConfirmButton>
+            <ConfirmButton confirmLabel={`Delete ${drafts.length} draft${drafts.length === 1 ? "" : "s"} for good`} disabled={!drafts.length || busy}
+              onConfirm={() => void remove.mutateAsync(drafts.map((item) => item.id)).then((result) => {
+                toast.success(`${result.deleted} draft${result.deleted === 1 ? "" : "s"} deleted.`)
+                onDone()
+              }).catch((error) => toast.error(errorMessage(error)))}>Delete drafts ({drafts.length})</ConfirmButton>
+          </>
+        ) : null}
+      </div>
+      {editable && published.length ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label={`Reason for revoking ${published.length} published (kept in the audit log)`}>
+            <TextInput value={reason} maxLength={500} className="w-72" onChange={(event) => setReason(event.target.value)} />
+          </Field>
+          <ConfirmButton confirmLabel={`Revoke ${published.length} for good`} disabled={reason.trim().length < 3 || busy}
+            onConfirm={() => void revoke.mutateAsync({ ids: published.map((item) => item.id), reason: reason.trim() }).then((result) => {
+              toast.success(`${result.revoked} revoked; their verify pages now say so.`)
+              setReason("")
+              onDone()
+            }).catch((error) => toast.error(errorMessage(error)))}>Revoke published ({published.length})</ConfirmButton>
+        </div>
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        Drafts can be deleted; published credentials are revoked instead so their links keep saying they were withdrawn. The ZIP is built in this browser from the stored files.
+      </p>
+    </div>
   )
 }
 
@@ -792,7 +913,7 @@ function CredentialRow({ item, editable, picked, expanded, onPick, onExpand }: {
     <>
       <TableRow>
         <TableCell>
-          <input type="checkbox" aria-label={`Tick ${item.code}`} disabled={item.status !== "DRAFT" || !editable} checked={picked} onChange={(event) => onPick(event.target.checked)} />
+          <input type="checkbox" aria-label={`Tick ${item.code}`} checked={picked} onChange={(event) => onPick(event.target.checked)} />
         </TableCell>
         <TableCell>
           <div className="flex flex-col">

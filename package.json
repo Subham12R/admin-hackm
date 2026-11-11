@@ -27,6 +27,7 @@
     "@visx/shape": "^4.0.1-alpha.0",
     "boneyard-js": "^1.10.0",
     "class-variance-authority": "^0.7.1",
+    "client-zip": "2.5.1",
     "clsx": "^2.1.1",
     "cn": "^0.4.0",
     "d3-array": "^3.2.4",

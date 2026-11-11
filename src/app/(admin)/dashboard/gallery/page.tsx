@@ -55,6 +55,8 @@ export default function GalleryPage() {
   const [captions, setCaptions] = useState<Record<string, string>>({})
   const update = useAdminMutation<{ id: string; body: { caption?: string; published?: boolean } }>(({ id, body }) => ({ path: `/api/admin/gallery/${id}`, method: "PATCH", body }), AREA)
   const remove = useAdminMutation<string>((id) => ({ path: `/api/admin/gallery/${id}`, method: "DELETE" }), AREA)
+  const bulk = useAdminMutation<{ ids: string[]; action: "show" | "hide" | "delete" }, { changed: number }>((body) => ({ path: "/api/admin/gallery/bulk", body }), AREA)
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
 
   const data = gallery.data
   const uploading = uploads.some((item) => item.status === "uploading" || item.status === "converting" || item.status === "waiting")
@@ -96,6 +98,25 @@ export default function GalleryPage() {
   if (gallery.isError) return <Notice tone="red">{errorMessage(gallery.error, "The gallery could not be loaded.")}</Notice>
 
   const items = data?.items ?? []
+  const chosen = items.filter((item) => selected.has(item.id)).map((item) => item.id)
+
+  function toggle(id: string, on: boolean) {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function runBulk(action: "show" | "hide" | "delete") {
+    const done = { show: "made public", hide: "hidden from the site", delete: "deleted" }[action]
+    void bulk.mutateAsync({ ids: chosen, action }).then((result) => {
+      toast.success(`${result.changed} photo${result.changed === 1 ? "" : "s"} ${done}.`)
+      setSelected(new Set())
+    }).catch((error: unknown) => toast.error(errorMessage(error, "The bulk action failed.")))
+  }
+
   return (
     <div className="mx-auto flex w-full flex-1 flex-col gap-4 rounded-2xl p-2 font-pixel-square leading-tighter">
       <PageHeader title="Gallery" description="Photos shown on the public gallery page at /gallery. Hidden photos stay here but leave the site." />
@@ -160,6 +181,23 @@ export default function GalleryPage() {
       ) : null}
 
       <Panel title="Photos" description={data ? `${items.filter((item) => item.published).length} public, ${items.filter((item) => !item.published).length} hidden` : undefined}>
+        {editable && items.length ? (
+          <div role="region" aria-label="Bulk actions" className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" aria-label="Select every photo" checked={chosen.length === items.length}
+                onChange={(event) => setSelected(event.target.checked ? new Set(items.map((item) => item.id)) : new Set())} />
+              {chosen.length ? `${chosen.length} selected` : "Select all"}
+            </label>
+            {chosen.length ? (
+              <>
+                <Button disabled={bulk.isPending} onClick={() => runBulk("show")}>Show</Button>
+                <Button disabled={bulk.isPending} onClick={() => runBulk("hide")}>Hide</Button>
+                <ConfirmButton confirmLabel={`Delete ${chosen.length} for good`} disabled={bulk.isPending} onConfirm={() => runBulk("delete")}>Delete</ConfirmButton>
+                <button type="button" className="text-xs underline underline-offset-2" onClick={() => setSelected(new Set())}>Clear</button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         {!data ? <LoadingRows /> : items.length ? (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {items.map((photo) => {
@@ -172,6 +210,11 @@ export default function GalleryPage() {
                       <img src={photo.url} alt={photo.caption || "Gallery photo"} loading="lazy" className={`absolute inset-0 size-full object-cover ${photo.published ? "" : "opacity-50"}`} />
                     ) : null}
                     {!photo.published ? <span className="absolute left-2 top-2"><Badge tone="amber">hidden</Badge></span> : null}
+                    {editable ? (
+                      <input type="checkbox" aria-label={`Select ${photo.caption || "photo"}`} checked={selected.has(photo.id)}
+                        onChange={(event) => toggle(photo.id, event.target.checked)}
+                        className="absolute right-2 top-2 size-5 accent-sky-600" />
+                    ) : null}
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-2">
                     {editable ? (

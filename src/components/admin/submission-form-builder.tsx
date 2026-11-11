@@ -21,7 +21,41 @@ export type FormField = {
   options?: string[]
   max_length?: number
 }
-type FormPayload = { stage_id: string; customized: boolean; fields: FormField[]; submitted: number; answered_keys: string[]; defaults: FormField[] }
+/** An outside form (Google Forms, Tally, ...) teams fill in instead of, or as well as, the built-in form. */
+export type ExternalForm = { enabled: boolean; url: string; mode: "replace" | "alongside" }
+type FormPayload = {
+  stage_id: string
+  customized: boolean
+  fields: FormField[]
+  submitted: number
+  answered_keys: string[]
+  defaults: FormField[]
+  /** Missing on older servers. */
+  external?: ExternalForm
+}
+
+/**
+ * Providers the participant site may frame (its CSP frame-src lists the same hosts); any other https link
+ * still works, as an "open the form" button. Keep in sync with hackm frontend/src/lib/external-forms.ts.
+ */
+const EMBEDDABLE_HOSTS = ["docs.google.com", "forms.office.com", "forms.cloud.microsoft", "tally.so", "form.typeform.com", "form.jotform.com", "airtable.com"]
+
+function externalLinkCheck(url: string): { error?: string; note?: string } {
+  const value = url.trim()
+  if (!value) return {}
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return { error: "Paste the full link, starting with https://" }
+  }
+  if (parsed.protocol !== "https:") return { error: "The link must start with https://" }
+  const host = parsed.hostname.toLowerCase()
+  if (host === "forms.gle") return { note: "Short forms.gle links can't be embedded. In Google Forms press Send → link, untick \"Shorten URL\" and paste the long docs.google.com link to show the form on the page." }
+  if (host === "docs.google.com" && !parsed.pathname.startsWith("/forms/")) return { note: "This doesn't look like a Google Form link; teams will get an \"Open form\" button." }
+  if (!EMBEDDABLE_HOSTS.includes(host) && !host.endsWith(".typeform.com")) return { note: "This site isn't on the embed list, so teams get an \"Open form\" button that opens it in a new tab." }
+  return { note: "Teams will see this form right on their dashboard, with an \"Open in a new tab\" fallback." }
+}
 
 const TYPES: Record<Exclude<FormFieldType, "github">, string> = {
   short_text: "Short text",
@@ -61,7 +95,81 @@ export function SubmissionFormBuilder({ stageId, editable }: { stageId: string; 
       {open ? (
         form.isError ? <Notice tone="red">{errorMessage(form.error, "The form could not be loaded.")}</Notice>
           : !form.data ? <p className="text-sm text-muted-foreground">Loading…</p>
-            : <Builder key={JSON.stringify(form.data.fields)} data={form.data} stageId={stageId} editable={editable} />
+            : (
+              <div className="grid min-w-0 gap-4">
+                <ExternalFormSettings key={JSON.stringify(form.data.external ?? null)} data={form.data} stageId={stageId} editable={editable} />
+                {form.data.external?.enabled && form.data.external.mode === "replace" ? (
+                  <Notice tone="amber">Teams don&apos;t see the fields below while the outside form replaces them. They come back when you switch the outside form off or show it alongside.</Notice>
+                ) : null}
+                <Builder key={JSON.stringify(form.data.fields)} data={form.data} stageId={stageId} editable={editable} />
+              </div>
+            )
+      ) : null}
+    </div>
+  )
+}
+
+/** The toggle for an outside form: link, and whether it replaces our form or sits under it. */
+function ExternalFormSettings({ data, stageId, editable }: { data: FormPayload; stageId: string; editable: boolean }) {
+  const saved: ExternalForm = data.external ?? { enabled: false, url: "", mode: "replace" }
+  const [draft, setDraft] = useState<ExternalForm>(saved)
+  const save = useAdminMutation<{ external: ExternalForm }>((body) => ({ path: `/api/admin/stages/${stageId}/submission-form/external`, method: "PUT", body }),
+    [["submission-form", stageId], ["stages"]])
+  const check = externalLinkCheck(draft.url)
+  const dirty = JSON.stringify({ ...draft, url: draft.url.trim() }) !== JSON.stringify(saved)
+  const blocked = Boolean(check.error) || (draft.enabled && !draft.url.trim())
+
+  function submit(next: ExternalForm, done: string) {
+    void notify(save.mutateAsync({ external: { ...next, url: next.url.trim() } }), done)
+  }
+
+  return (
+    <div className="grid min-w-0 gap-3 rounded-lg border border-border p-3">
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={draft.enabled} disabled={!editable}
+          onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+        <span className="min-w-0">
+          <span className="font-medium">Use an outside form</span>
+          <span className="block text-xs text-muted-foreground">Embed a Google Form, Microsoft Form, Tally, Typeform, Jotform or Airtable form on the team&apos;s submission page.</span>
+        </span>
+      </label>
+      {draft.enabled || draft.url ? (
+        <div className={`grid min-w-0 gap-3 ${draft.enabled ? "" : "opacity-60"}`}>
+          <Field label="Form link" error={check.error} hint={check.error ? undefined : check.note}>
+            <div className="flex min-w-0 gap-2">
+              <TextInput value={draft.url} maxLength={1000} disabled={!editable} placeholder="https://docs.google.com/forms/d/e/…/viewform" className="min-w-0 flex-1"
+                onChange={(event) => setDraft({ ...draft, url: event.target.value })} />
+              {draft.url.trim() && !check.error ? (
+                <a href={draft.url.trim()} target="_blank" rel="noopener noreferrer" className="shrink-0 self-center text-xs underline">Open</a>
+              ) : null}
+            </div>
+          </Field>
+          <fieldset className="grid gap-1.5 text-sm" disabled={!editable}>
+            <legend className="mb-1 text-xs text-muted-foreground">How teams use it</legend>
+            <label className="flex items-start gap-2">
+              <input type="radio" name={`external-mode-${stageId}`} className="mt-1" checked={draft.mode === "replace"} onChange={() => setDraft({ ...draft, mode: "replace" })} />
+              <span>Instead of our form<span className="block text-xs text-muted-foreground">Teams only see the outside form. Nothing reaches the Submissions page, judging or the leaderboard here, so collect and judge the answers in that tool.</span></span>
+            </label>
+            <label className="flex items-start gap-2">
+              <input type="radio" name={`external-mode-${stageId}`} className="mt-1" checked={draft.mode === "alongside"} onChange={() => setDraft({ ...draft, mode: "alongside" })} />
+              <span>Below our form<span className="block text-xs text-muted-foreground">Teams submit their project here as usual and fill the outside form for anything extra.</span></span>
+            </label>
+          </fieldset>
+        </div>
+      ) : null}
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button tone="green" disabled={!dirty || blocked || save.isPending}
+            onClick={() => submit(draft, draft.enabled ? "Outside form saved. Teams see it on their dashboard now." : "Outside form switched off.")}>
+            {save.isPending ? "Saving…" : "Save outside form"}
+          </Button>
+          {dirty ? <Button onClick={() => setDraft(saved)}>Discard</Button> : null}
+          {!draft.enabled && saved.url ? (
+            <ConfirmButton confirmLabel="Remove the link" disabled={save.isPending}
+              onConfirm={() => submit({ enabled: false, url: "", mode: "replace" }, "Outside form link removed.")}>Clear link</ConfirmButton>
+          ) : null}
+          {saved.enabled ? <Badge tone="green">on · {saved.mode === "replace" ? "instead of our form" : "below our form"}</Badge> : null}
+        </div>
       ) : null}
     </div>
   )

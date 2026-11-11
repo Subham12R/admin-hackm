@@ -28,6 +28,10 @@ export type Stage = {
   statement_mode?: StatementMode
   // REVEAL: the clock follows the reveal (each timed team starts its own). OPEN: it starts for every team when submissions open.
   timer_start?: TimerStart
+  // This event's problem statement titles fill the public home page's Domains (one event at a time).
+  show_on_home?: boolean
+  // A track open to every team on top of its pick, shown first on the home page (e.g. a partner prize track).
+  overall_track?: string
   tracks: Track[]
   updated_at: string | null
   completed_at: string | null
@@ -42,7 +46,7 @@ export type TimerStart = "REVEAL" | "OPEN"
 
 export const STATEMENT_MODES: Record<StatementMode, string> = {
   REVEAL: "Reveal at a set time",
-  SELECT: "Selectable: all visible, leader picks one",
+  SELECT: "Selectable: all out together, leader picks one",
 }
 
 export const TIMER_STARTS: Record<TimerStart, string> = {

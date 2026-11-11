@@ -85,6 +85,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
     name: stage.name, description: stage.description, eligibility: stage.eligibility, schedule: scheduleOf(stage),
     hours: stage.time_limit_minutes ? String(stage.time_limit_minutes / 60) : "",
     mode: (stage.statement_mode ?? "REVEAL") as StatementMode, timerStart: (stage.timer_start ?? "REVEAL") as TimerStart,
+    home: Boolean(stage.show_on_home), overall: stage.overall_track ?? "",
   }))
   const [form, setForm] = useState(initial)
   const save = useAdminMutation<Record<string, unknown>>((body) => ({ path: `/api/admin/stages/${stage.id}`, method: "PATCH", body }), AREAS)
@@ -108,6 +109,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
   const timerError = form.timerStart === "OPEN" && !form.schedule.submission_opens_at ? "Set when submissions open; every team's clock starts then." : ""
   const dirty = form.name !== initial.name || form.description !== initial.description || form.eligibility !== initial.eligibility || changedTimes.length > 0
     || form.hours.trim() !== initial.hours || form.mode !== initial.mode || form.timerStart !== initial.timerStart
+    || form.home !== initial.home || form.overall.trim() !== initial.overall
 
   function submit() {
     const body: Record<string, unknown> = {}
@@ -118,6 +120,8 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
     if (form.hours.trim() !== initial.hours) body.time_limit_minutes = form.hours.trim() ? Math.round(hoursNumber * 60) : null
     if (form.mode !== initial.mode) body.statement_mode = form.mode
     if (form.timerStart !== initial.timerStart) body.timer_start = form.timerStart
+    if (form.home !== initial.home) body.show_on_home = form.home
+    if (form.overall.trim() !== initial.overall) body.overall_track = form.overall.trim()
     void notify(save.mutateAsync(body), "Event saved. The server enforces the new times now.")
   }
 
@@ -129,6 +133,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
       actions={
         <span className="flex flex-wrap items-center gap-2">
           <Badge tone={stage.published ? "green" : "zinc"}>{stage.published ? "visible to teams" : "hidden"}</Badge>
+          {stage.show_on_home ? <Badge tone="green">on home page</Badge> : null}
           <StatusBadge status={submissionWindow.state} label={submissionWindow.state === "OPEN" ? "submissions open" : submissionWindow.state === "CLOSED" ? "submissions closed" : "not open yet"} />
           {stage.completed_at ? <Badge tone="green">completed</Badge> : null}
           <Link href={`/dashboard/submissions?event=${stage.id}`} className="text-sm underline">Submissions</Link>
@@ -174,7 +179,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
               onChange={(event) => setForm({ ...form, hours: event.target.value })} />
           </Field>
           <Field label="Problem statements" hint={form.mode !== initial.mode ? "Unsaved change" : form.mode === "SELECT"
-            ? "Teams see every statement as soon as the event is visible. The leader picks one; no reveal time is used."
+            ? "All statements come out together at the reveal time (or right away if it's empty), with no per-team start. The leader picks one."
             : "Hidden until the reveal time above."}>
             <Select value={form.mode} disabled={!editable} onChange={(event) => setForm({ ...form, mode: event.target.value as StatementMode })}>
               {Object.entries(STATEMENT_MODES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -186,6 +191,18 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             <Select value={form.timerStart} disabled={!editable} onChange={(event) => setForm({ ...form, timerStart: event.target.value as TimerStart })}>
               {Object.entries(TIMER_STARTS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
+          </Field>
+          <Field label="Home page Domains" hint={form.home !== initial.home ? "Unsaved change" : form.home
+            ? "The home page shows this event's statement titles (titles only) at the reveal time, with a countdown until then. Picking this clears any other event."
+            : "Off: another event (or none) feeds the home page. Only published events show there."}>
+            <Select value={form.home ? "yes" : "no"} disabled={!editable} onChange={(event) => setForm({ ...form, home: event.target.value === "yes" })}>
+              <option value="no">Don&apos;t show on the home page</option>
+              <option value="yes">Show these titles on the home page</option>
+            </Select>
+          </Field>
+          <Field label="Overall track (optional)" hint={form.overall.trim() !== initial.overall ? "Unsaved change" : "Open to every team on top of its pick, e.g. MLH Partner Track: Build with Gemini. Shown first on the home page."}>
+            <TextInput value={form.overall} disabled={!editable} maxLength={200} placeholder="MLH Partner Track: Build with Gemini"
+              onChange={(event) => setForm({ ...form, overall: event.target.value })} />
           </Field>
           {editable ? (
             <div className="flex flex-wrap items-end gap-2 md:col-span-2">
@@ -222,7 +239,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
               <p className="font-medium">Problem statements</p>
               <p className="text-xs text-muted-foreground">
                 {stage.statement_mode === "SELECT"
-                  ? "Selectable: teams see all of them from the start and the leader picks one."
+                  ? stage.statements.released ? "Selectable and out now: the leader picks one." : `Selectable: all of them come out together ${stage.statements.release_at ? dateTime(stage.statements.release_at) : "once you set a reveal time"}, then the leader picks one.`
                   : stage.statements.released
                   ? stage.time_limit_minutes && stage.timer_start !== "OPEN" ? "Out now: each team sees them when it starts its own clock." : "Teams can read these now."
                   : stage.statements.release_at ? `Revealed to teams ${dateTime(stage.statements.release_at)}${stage.time_limit_minutes ? "; from then each team can start its clock" : ""}.` : "Hidden from teams until you set a reveal time or reveal them now."}
@@ -231,7 +248,7 @@ function StageCard({ stage, editable, only }: { stage: Stage; editable: boolean;
             </div>
             {editable ? (
               <span className="flex max-w-full flex-wrap gap-1">
-              {!stage.statements.released && stage.statement_mode !== "SELECT" && stage.tracks.length ? (
+              {!stage.statements.released && stage.tracks.length ? (
                 <ConfirmButton tone="green" confirmLabel="Show them to teams now" disabled={save.isPending}
                   onConfirm={() => void notify(save.mutateAsync({ statements_release_at: new Date().toISOString() }), "Problem statements revealed.")}>
                   Reveal now

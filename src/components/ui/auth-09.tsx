@@ -94,14 +94,14 @@ export default function Auth09() {
             <h2 className="mb-2 text-3xl font-medium tracking-tight">Sign in</h2>
             <p className="text-[15px] text-neutral-500">Use the admin account created for this event.</p>
           </motion.div>
-          <form onSubmit={submit} className="flex flex-col gap-4">
+          <form method="post" onSubmit={submit} className="flex flex-col gap-4">
             <motion.div variants={itemVariants} className="flex flex-col gap-1.5">
               <label htmlFor="email" className="text-sm font-medium">Email</label>
-              <input id="email" type="email" autoComplete="email" required placeholder="you@hackmatrix.codes" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600" />
+              <input id="email" name="email" type="email" autoComplete="username" required placeholder="you@hackmatrix.codes" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600" />
             </motion.div>
             <motion.div variants={itemVariants} className="flex flex-col gap-1.5">
               <label htmlFor="password" className="text-sm font-medium">Password</label>
-              <input id="password" type="password" autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600" />
+              <input id="password" name="password" type="password" autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600" />
             </motion.div>
             {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
             <motion.div variants={itemVariants}>

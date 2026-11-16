@@ -1,5 +1,8 @@
 # ORG. admin panel
 
+[![CI](https://github.com/Subham12R/admin-hackm/actions/workflows/ci.yml/badge.svg)](https://github.com/Subham12R/admin-hackm/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **ORG. · One stop solution for managing events.** The staff and judge portal for events run on
 [`hackm-backend`](https://github.com/Subham12R/hackm-backend), currently HackMatrix 2026. Organisers handle
 registrations, payments, teams, events and problem statements, judging, results, certificates, check-in, email and
@@ -187,3 +190,13 @@ Re-capture after adding a `Bones` name or changing a wrapped layout:
 Routes and breakpoints live in `boneyard.config.json`. `scripts/tidy-bones.mjs` runs after the
 capture: it caps each skeleton at one screen and turns table cells into text-sized bars.
 Only layout boxes are stored, never the captured text.
+
+## Contributing
+
+Bug reports and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Report security problems privately, as described in
+[SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Subham Karmakar.

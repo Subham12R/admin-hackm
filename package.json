@@ -2,6 +2,15 @@
   "name": "admin-hackm",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "author": "Subham Karmakar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Subham12R/admin-hackm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Subham12R/admin-hackm/issues"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

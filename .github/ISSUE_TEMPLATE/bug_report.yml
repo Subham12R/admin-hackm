@@ -1,0 +1,31 @@
+name: Bug report
+description: Something in the admin panel is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: Browser, OS, Node.js version, and the commit or version you ran.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshots or console output
+      description: Remove tokens, emails, and any participant data first.
